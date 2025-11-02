@@ -1,3 +1,138 @@
+# ♟️ C-Chess: Ajedrez Programable / Programmable Chess
+
+---
+<div align="center">
+    <h1>English Version</h1>
+</div>
+---
+
+# ♟️ C-Chess: Programmable Chess
+
+**C-Chess** is a turn-based strategy project developed in **Godot Engine 4.x** that combines classic chess mechanics with an innovative **programmable block system**.
+
+The goal is to explore how **visual programming and modular logic** can be integrated to give each piece an autonomous and customizable behavior.
+
+---
+
+## 🧠 Block System (BlockSystem)
+
+This is the project's central logic engine. It functions as an interpreter that:
+* Defines and manages action blocks (move, capture, conditions, etc.).
+* Assigns virtual resource limits (**"RAM"**) to each piece.
+* Allows the creation of **visual scripts** (sequences of blocks) that pieces execute automatically on their turn.
+
+This enables programmable chess where strategies are defined at a modular code level.
+
+---
+
+## 🧩 Project Structure
+
+### 🎮 Main Scene (`Main.tscn`)
+
+Contains the fundamental nodes that orchestrate the game:
+
+* **`_GameManager`**: Core logic (turn management, victory conditions, etc.).
+* **`_Table`**: Representation of the chessboard.
+* **`_Pieces`**: Contains and manages all pieces in play.
+* **`_Turn`**: Controls and displays the current turn.
+* **`_BackGround`**: Visual background of the board.
+* **`_CanvasLayer`**: Layer for the User Interface (UI).
+* **`_Camera`**: Main scene camera.
+* **`_Music`**: Background music controller.
+* **`_Node (test_block.gd)`**: Auxiliary node used for testing the block system.
+
+---
+
+### 🧱 Secondary Scene (`Board.tscn`)
+
+Defines the playing area and its interactions:
+
+* **`_Board`**: Main board node.
+    * `Sprite2D`: Graphical representation.
+    * `Area2D`: Detects interactions and collisions.
+    * `CollisionShape2D`: Defines the physical interaction area.
+
+---
+
+## ⚙️ Key Scripts
+
+### `test_block.gd`
+
+Testing script focused on verifying the functionality of the **BlockSystem**:
+
+* **Testable Features:**
+    * Get block information (`get_block_info`).
+    * Filtering by categories (`get_blocks_by_category`).
+    * Piece RAM capacity (`get_piece_ram_capacity`).
+    * Script RAM usage calculation (`calculate_ram_usage`).
+    * Script validation (`is_script_valid`).
+
+* **Test Script Example:**
+    ```gdscript
+    var test_script = [
+        {"type": "move_forward"},
+        {"type": "if_enemy_front"}, 
+        {"type": "capture"}
+    ]
+    ```
+
+### `turn_display.gd`
+
+Controls the visualization and animation of the current turn:
+
+* Shows which player has the turn (**white** or **black**).
+* Applies a cyclical visual animation to add dynamism to the turn indicator.
+
+* **Update Function:**
+    ```gdscript
+    func update_turn(turn: String):
+        if turn == "white":
+            texture = load("res://Assets/turn-white.png")
+        else:
+            texture = load("res://Assets/turn-black.png")
+    ```
+
+---
+
+## 🚀 How to Run the Project
+
+1.  Open the project in **Godot Engine 4.x**.
+2.  Load the main scene `Main.tscn`.
+3.  Press the **Run** button (`▶️ Run`).
+4.  Use the console to see the results of the `test_block.gd` tests.
+
+---
+
+## 📚 Project Goals
+
+* Integrate modular logic (blocks) into a classic strategy game.
+* Experiment with basic **Artificial Intelligence (AI)** by creating visual scripts for the pieces.
+* Develop a scalable and maintainable architecture for future turn-based strategy games.
+
+---
+
+## 👨‍💻 Author
+
+**Felipe Carballo**
+Software Developer and Systems Analysis student.
+
+* [GitHub](https://github.com/ArukouFX)
+* [LinkedIn](https://www.linkedin.com/in/felipecarballolovato/)
+
+---
+
+## 🧾 License
+
+This project is distributed under the **MIT License**. You are free to use, modify, and distribute the code, provided you retain attribution to the original author.
+
+---
+---
+<div align="center">
+    <h1>Versión en Español</h1>
+</div>
+---
+---
+
 # ♟️ C-Chess: Ajedrez Programable
 
 **C-Chess** es un proyecto de estrategia por turnos desarrollado en **Godot Engine 4.x** que combina las mecánicas clásicas del ajedrez con un innovador **sistema de bloques programables**.
@@ -108,8 +243,8 @@ Controla la visualización y animación del turno actual:
 **Felipe Carballo**
 Desarrollador de software y estudiante de Análisis de Sistemas.
 
-* [GitHub]([https://github.com/tu-usuario](https://github.com/ArukouFX))
-* [LinkedIn]([https://www.linkedin.com/in/tu-perfil](https://www.linkedin.com/in/felipecarballolovato/))
+* [GitHub](https://github.com/ArukouFX)
+* [LinkedIn](https://www.linkedin.com/in/felipecarballolovato/)
 
 ---
 
