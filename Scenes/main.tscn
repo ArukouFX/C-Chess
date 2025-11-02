@@ -1,0 +1,83 @@
+[gd_scene load_steps=16 format=3 uid="uid://10xfqjyoeplg"]
+
+[ext_resource type="Shader" uid="uid://bvkmoiob05hns" path="res://Scenes/clouds.gdshader" id="1_6iyac"]
+[ext_resource type="Shader" uid="uid://byhf8vn3y83bs" path="res://Scenes/TurnDisplay.gdshader" id="1_344ge"]
+[ext_resource type="PackedScene" uid="uid://fbmsqh4ve7dt" path="res://Scenes/board.tscn" id="1_bo1nx"]
+[ext_resource type="Texture2D" uid="uid://dp6sjy63c7o4x" path="res://Assets/background.png" id="1_d1ilt"]
+[ext_resource type="Texture2D" uid="uid://bhr80qslg33i7" path="res://Assets/turn-white.png" id="1_jjvhh"]
+[ext_resource type="PackedScene" uid="uid://12fcn0yfrd3a" path="res://Scenes/piece.tscn" id="2_8gbba"]
+[ext_resource type="Script" uid="uid://cpk5464xmocxn" path="res://Scenes/turn_display.gd" id="2_kry3j"]
+[ext_resource type="Script" uid="uid://dr3rbxcunf7rt" path="res://Scenes/game_manager.gd" id="3_8gbba"]
+[ext_resource type="Script" uid="uid://bm8614rdpx2f7" path="res://Scenes/pieces.gd" id="4_6bp64"]
+[ext_resource type="AudioStream" uid="uid://cxq42qqbm0fg8" path="res://Music/chess beat.mp3" id="6_21xkr"]
+[ext_resource type="Script" uid="uid://dajpp3ftrbqj6" path="res://Scenes/camera_2d.gd" id="7_hptm8"]
+[ext_resource type="Script" uid="uid://dktbk61gsaipm" path="res://Scenes/test_blocks.gd" id="11_d1ilt"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_fdnlq"]
+shader = ExtResource("1_6iyac")
+shader_parameter/speed = 1.0
+shader_parameter/cloud_scale = 3.0
+shader_parameter/softness = 2.0
+shader_parameter/ps1_resolution = 240.0
+shader_parameter/vertex_snap_intensity = 0.5
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_344ge"]
+shader = ExtResource("1_344ge")
+shader_parameter/color_cycle_speed = 1.0
+shader_parameter/color_intensity = 0.5
+shader_parameter/pixel_size = 8.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_ynf5e"]
+shader = ExtResource("1_344ge")
+shader_parameter/color_cycle_speed = 1.0
+shader_parameter/color_intensity = 0.5
+shader_parameter/pixel_size = 8.0
+
+[node name="Main" type="Node2D"]
+
+[node name="BackGround" type="Node2D" parent="."]
+
+[node name="Sprite2D" type="Sprite2D" parent="BackGround"]
+material = SubResource("ShaderMaterial_fdnlq")
+texture = ExtResource("1_d1ilt")
+region_enabled = true
+region_rect = Rect2(2700, 1500, 2700, 1500)
+
+[node name="Turn" type="Node2D" parent="."]
+material = SubResource("ShaderMaterial_344ge")
+
+[node name="TurnDisplay" type="Sprite2D" parent="Turn"]
+material = SubResource("ShaderMaterial_ynf5e")
+position = Vector2(-951, 6)
+texture = ExtResource("1_jjvhh")
+script = ExtResource("2_kry3j")
+
+[node name="Table" type="Node2D" parent="."]
+
+[node name="Board" parent="Table" instance=ExtResource("1_bo1nx")]
+
+[node name="Pieces" type="Node2D" parent="."]
+script = ExtResource("4_6bp64")
+
+[node name="Piece" parent="Pieces" instance=ExtResource("2_8gbba")]
+
+[node name="Camera" type="Node2D" parent="."]
+
+[node name="Camera2D" type="Camera2D" parent="Camera"]
+script = ExtResource("7_hptm8")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="GameManager" type="Node" parent="."]
+script = ExtResource("3_8gbba")
+
+[node name="Music" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("6_21xkr")
+volume_db = -5.0
+pitch_scale = 0.9
+parameters/looping = true
+
+[node name="Node" type="Node" parent="."]
+script = ExtResource("11_d1ilt")
+
+[connection signal="released" from="Pieces/Piece" to="GameManager" method="_on_piece_released"]
