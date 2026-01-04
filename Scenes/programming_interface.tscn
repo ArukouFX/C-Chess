@@ -13,7 +13,7 @@ layout_mode = 3
 anchors_preset = 0
 offset_top = -20.0
 offset_bottom = -20.0
-scale = Vector2(2, 2)
+scale = Vector2(1e-05, 1e-05)
 size_flags_horizontal = 8
 script = ExtResource("1_lg07q")
 
@@ -65,7 +65,7 @@ layout_mode = 2
 layout_mode = 2
 theme_override_fonts/font = ExtResource("1_x7mol")
 theme_override_styles/focus = SubResource("StyleBoxFlat_4aigi")
-text = "Probar"
+text = "Ejecutar"
 icon = SubResource("ViewportTexture_4aigi")
 
 [node name="SaveButton" type="Button" parent="UI/MainContainer/LeftPanel/ControlButtons"]

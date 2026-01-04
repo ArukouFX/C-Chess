@@ -5,6 +5,8 @@ class_name DraggableBlock
 signal block_dragged(block, global_position)
 signal block_dropped(block, global_position)
 
+var base_size = Vector2(180, 60)
+
 var block_data: Dictionary
 var is_dragging: bool = false
 var drag_offset: Vector2 = Vector2.ZERO  
@@ -41,12 +43,26 @@ func setup_block(data: Dictionary):
 			"movement": Color.ROYAL_BLUE,
 			"logic": Color.FOREST_GREEN, 
 			"action": Color.FIREBRICK,
-			"sensor": Color.DARK_ORANGE
+			"sensor": Color.DARK_ORANGE,
+			"control": Color.PURPLE
 		}
 		color_rect.color = category_colors.get(data.get("category", "movement"), Color.GRAY)
 	
-	custom_minimum_size = Vector2(180, 60)
-	size = custom_minimum_size
+	# El tamaño ahora se ajusta desde programming_interface.gd
+	# Solo establecer mínimo
+	custom_minimum_size = base_size
+	size = base_size
+
+# Agregar método para reescalar:
+func rescale_block(new_scale: float):
+	var scaled_size = base_size * new_scale
+	custom_minimum_size = scaled_size
+	size = scaled_size
+	
+	# También escalar fuente si es necesario
+	if block_name_label:
+		var base_font_size = 14
+		block_name_label.add_theme_font_size_override("font_size", int(base_font_size * new_scale))
 
 func get_block_data() -> Dictionary:
 	return block_data
@@ -68,89 +84,93 @@ func _input(event):
 			_end_drag(event)
 			get_viewport().set_input_as_handled()
 	
-	# MOVIMIENTO - igual que piece.gd
 	elif event is InputEventMouseMotion and is_dragging:
 		global_position = get_global_mouse_position() - drag_offset
 		emit_signal("block_dragged", self, get_global_mouse_position())
 		get_viewport().set_input_as_handled()
 
+# En draggable_block.gd, verificar que estas funciones existan:
 func _start_drag(event: InputEventMouseButton):
 	print("START DRAG: ", block_data["name"])
+	
 	is_dragging = true
 	drag_offset = get_global_mouse_position() - global_position
 	original_position = global_position
 	original_parent = get_parent()
 	
+	# Mover al frente
 	z_index = 100
 	modulate = Color(1.3, 1.3, 0.7)
-	
-	# Ignore impues while u drag a piece
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
 	emit_signal("block_dragged", self, get_global_mouse_position())
 
 func _end_drag(event: InputEventMouseButton):
 	print("END DRAG: ", block_data["name"])
+	
 	is_dragging = false
 	z_index = 0
 	modulate = Color.WHITE
 	
-	# Restaure filter
-	mouse_filter = Control.MOUSE_FILTER_STOP
-	
-	# Destiny
-	var workspace = get_workspace_dropzone()
-	if workspace and is_over_workspace(workspace):
-		print("   ✅ Moving to workspace")
-		move_to_workspace(workspace)
-	else:
-		print("   ↩️ Returning to palette")
-		return_to_palette()
-	
 	emit_signal("block_dropped", self, get_global_mouse_position())
 
-func get_workspace_dropzone():
+func _return_to_palette():
+	if original_parent:
+		# Remover del parent actual
+		if get_parent():
+			get_parent().remove_child(self)
+		
+		# Regresar al parent original
+		original_parent.add_child(self)
+		global_position = original_position
+		is_in_workspace = false
+		print("Bloque regresado a paleta")
+	else:
+		print("No hay parent original, eliminando")
+		queue_free()
+
+func _find_workspace():
+	# Buscar ProgrammingInterface primero
 	var programming_interface = null
 	
-	# Search possible paths
-	var possible_paths = [
-		"ProgrammingInterface",
-		"../ProgrammingInterface",
-		"../../ProgrammingInterface"
-	]
+	# Buscar en toda la escena
+	for node in get_tree().get_nodes_in_group("programming_interface"):
+		programming_interface = node
+		break
 	
-	# Try first relative paths
-	for path in possible_paths:
-		if has_node(path):
-			programming_interface = get_node(path)
-			break
+	# Si no está en grupo, buscar por nombre
+	if not programming_interface:
+		for node in get_tree().get_nodes_in_group(""):
+			if "ProgrammingInterface" in node.name:
+				programming_interface = node
+				break
 	
-	# Search in the root
+	# Si aún no, buscar en root
 	if not programming_interface:
 		for child in get_tree().root.get_children():
-			if child.name == "ProgrammingInterface":
+			if child.name == "ProgrammingInterface" or child.has_method("setup_for_piece"):
 				programming_interface = child
 				break
 	
 	if programming_interface:
 		print("Found ProgrammingInterface")
-		# Differents roots in ProgrammingInterface
-		var possible_workspace_paths = [
-			"UI/MainContainer/CenterPanel/Workspace/DropZone",
-			"Workspace/DropZone",
-			"DropZone"
-		]
+		# Buscar DropZone dentro
+		var dropzone = programming_interface.get_node_or_null("UI/MainContainer/CenterPanel/Workspace/DropZone")
+		if dropzone:
+			return dropzone
 		
-		for path in possible_workspace_paths:
-			var workspace_node = programming_interface.get_node_or_null(path)
-			if workspace_node:
-				print("Found workspace at: ", path)
-				return workspace_node
+		# Intentar otras rutas
+		dropzone = programming_interface.get_node_or_null("Workspace/DropZone")
+		if dropzone:
+			return dropzone
+		
+		dropzone = programming_interface.get_node_or_null("DropZone")
+		if dropzone:
+			return dropzone
 	
 	print("Workspace not found")
 	return null
 
-func is_over_workspace(workspace: Control) -> bool:
+func _is_over_workspace(workspace: Control) -> bool:
 	if not workspace:
 		return false
 	
@@ -164,28 +184,20 @@ func is_over_workspace(workspace: Control) -> bool:
 	
 	return workspace_rect.has_point(block_center)
 
-func move_to_workspace(workspace: Control):
+func _move_to_workspace(workspace: Control):
 	if get_parent():
 		get_parent().remove_child(self)
 	
 	workspace.add_child(self)
 	is_in_workspace = true
 	
-	# Posicionar en el workspace
-	position = Vector2(20, 20 + workspace.get_child_count() * 70)
+	# Posicionar en el workspace (ajustar posición local)
+	var local_pos = get_global_mouse_position() - workspace.global_position
+	position = Vector2(20, max(local_pos.y, 10))
 	
-	print("Successfully moved to workspace")
-
-func return_to_palette():
-	if get_parent():
-		get_parent().remove_child(self)
+	# Asegurar que sea visible
+	visible = true
+	modulate = Color.WHITE
+	z_index = 1000
 	
-	if original_parent:
-		original_parent.add_child(self)
-		global_position = original_position
-		is_in_workspace = false
-		print("Successfully returned to palette")
-	else:
-		print("No original parent, queuing free")
-		queue_free()
-		
+	print("Successfully moved to workspace at position: ", position)

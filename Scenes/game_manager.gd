@@ -10,6 +10,11 @@ var current_programming_interface: Control = null
 var current_turn: String = "white"
 var is_opening_interface: bool = false
 
+var programmed_moves: Array = []
+var execution_phase: bool = false
+var current_programming_piece: Node = null
+var execution_timer: Timer = null
+
 # Pre-cgarge
 var PieceScene = preload("res://Scenes/piece.tscn")
 var ProgrammingInterfaceScene = preload("res://Scenes/programming_interface.tscn")
@@ -40,6 +45,73 @@ func _initialize_game():
 	spawn_pawns()
 	spawn_main_pieces()
 	update_turn_display()
+	
+	# Esperar un frame para que las piezas estén listas
+	await get_tree().process_frame
+	
+	# Conectar señales y configurar estado inicial
+	_connect_piece_signals()
+	
+	# Iniciar fase de programación
+	start_programming_phase()
+
+func on_resolution_changed(new_resolution: Vector2i):
+	print("GameManager: Resolución cambiada a ", new_resolution)
+	
+	# 1. Esperar a que el board se actualice
+	await get_tree().process_frame
+	
+	# 2. Re-posicionar todas las piezas
+	_reposition_all_pieces()
+
+func _reposition_all_pieces():
+	print("Re-posicionando todas las piezas...")
+	
+	for piece in pieces_container.get_children():
+		if piece.has_method("get_board_position"):
+			var board_coord = piece.board_position
+			var new_world_pos = _board_to_world_position(board_coord)
+			
+			# Actualizar posición
+			piece.position = new_world_pos
+			piece.global_position = new_world_pos
+			
+			print("  ", piece.piece_type, " movido a: ", new_world_pos)
+
+# Modificar spawn_piece para usar sistema centralizado:
+func spawn_piece(type: String, board_coord: Vector2):
+	var piece = PieceScene.instantiate()
+	var color = type.split("_")[0]
+	var piece_type = type.split("_")[1]
+	
+	piece.setup_piece(piece_textures[type], color, piece_type, board_coord)
+	
+	# Conectar señal
+	if piece.has_signal("right_clicked"):
+		piece.right_clicked.connect(_on_piece_right_clicked)
+	
+	# Calcular posición mundial CORRECTAMENTE
+	var world_position = _board_to_world_position(board_coord)
+	piece.position = world_position
+	
+	# Debug
+	print("Pieza ", type, ":")
+	print("  Coord tablero: ", board_coord)
+	print("  Pos mundo: ", world_position)
+	print("  Board origin: ", board.get_board_origin() if board else "N/A")
+	print("  Cell size: ", board.cell_size if board else "N/A")
+	
+	pieces_container.add_child(piece)
+	return piece
+
+# Asegurar que _board_to_world_position use la función del board:
+func _board_to_world_position(board_coord: Vector2) -> Vector2:
+	if board and board.has_method("get_world_position_from_cell"):
+		return board.get_world_position_from_cell(board_coord)
+	
+	# Fallback con valores por defecto
+	print("WARNING: Usando fallback para coordenada ", board_coord)
+	return Vector2(320 + board_coord.x * 80, 384 + (7 - board_coord.y) * 80)
 
 func _debug_board_info():
 	print("=== BOARD POSITION DEBUG ===")
@@ -54,92 +126,54 @@ func _debug_board_info():
 	print("=============================")
 
 # === Piece System ===
-func spawn_piece(type: String, board_coord: Vector2):
-	var piece = PieceScene.instantiate()
-	var color = type.split("_")[0]
-	var piece_type = type.split("_")[1]
-	
-	piece.setup_piece(piece_textures[type], color, piece_type)
-	piece.connect("released", _on_piece_released)
-	
-	# Connect to click
-	if piece.has_signal("right_clicked"):
-		piece.right_clicked.connect(_on_piece_right_clicked)
-		print("Connected right_clicked signal to: ", type)
-	else:
-		print("No right_clicked signal in new piece: ", type)
-
-	var world_position = _board_to_world_position(board_coord)
-	piece.position = world_position
-	
-	pieces_container.add_child(piece)
-	return piece
-
-func _board_to_world_position(board_coord: Vector2) -> Vector2:
-	var origin = board.get_board_origin()
-	var cell_size = board.cell_size
-	return origin + Vector2(
-		(board_coord.x + 0.5) * cell_size,
-		(board_coord.y + 0.5) * cell_size
-	)
-
 func spawn_pawns():
+	# CORRECCIÓN: Ahora Y=0 es ARRIBA (negras), Y=7 es ABAJO (blancas)
+	# Pero board.gd NO invierte Y, así que:
+	# - Negras en Y=0,1 (arriba en pantalla)
+	# - Blancas en Y=6,7 (abajo en pantalla)
+	
+	print("Generando peones...")
+	
 	for i in range(8):
-		spawn_piece("white_pawn", Vector2(i, 6))
-		spawn_piece("black_pawn", Vector2(i, 1))
+		# NEGRAS ARRIBA (Y bajos)
+		spawn_piece("black_pawn", Vector2(i, 1))  # Fila 7 en ajedrez
+		# BLANCAS ABAJO (Y altos)  
+		spawn_piece("white_pawn", Vector2(i, 6))  # Fila 2 en ajedrez
+	
+	print("Peones generados")
 
 func spawn_main_pieces():
 	var white_order = ["white_tower", "white_horse", "white_bishop", "white_queen", "white_king", "white_bishop", "white_horse", "white_tower"]
 	var black_order = ["black_tower", "black_horse", "black_bishop", "black_queen", "black_king", "black_bishop", "black_horse", "black_tower"]
 	
+	print("Generando piezas principales...")
+	
 	for i in range(8):
-		spawn_piece(white_order[i], Vector2(i, 7))
+		# NEGRAS ARRIBA - fila 8 en ajedrez (Y=0)
 		spawn_piece(black_order[i], Vector2(i, 0))
+		# BLANCAS ABAJO - fila 1 en ajedrez (Y=7)
+		spawn_piece(white_order[i], Vector2(i, 7))
+	
+	print("Piezas principales generadas")
+
+func _world_to_board_coord(world_position: Vector2) -> Vector2:
+	# Usar SIEMPRE la función del tablero
+	if board and board.has_method("get_cell_coord"):
+		return board.get_cell_coord(world_position)
+	
+	# Fallback CORREGIDO (sin invertir Y)
+	var cell_size = 80.0
+	var board_center = Vector2(680, 384)
+	var total_size = Vector2(640, 640)
+	var board_origin = board_center - (total_size / 2)
+	
+	var local_pos = world_position - board_origin
+	var cell_x = floor(local_pos.x / cell_size)
+	var cell_y = floor(local_pos.y / cell_size)  # NO INVERTIR
+	
+	return Vector2(cell_x, cell_y)
 
 # === Movement Manager ===
-func _on_piece_released(piece, world_position):
-	print("=== PIECE RELEASED ===")
-	print("Piece:", piece.piece_type, " (", piece.piece_color, ")")
-	print("Current turn:", current_turn)
-	
-	if not is_valid_turn(piece.piece_color):
-		print("Not your turn! Current: ", current_turn)
-		_reset_piece_position(piece)
-		return
-	
-	if not board.is_inside_board(world_position):
-		print("Outside board")
-		_reset_piece_position(piece)
-		return
-	
-	var target_cell = board.get_nearest_cell_pos(world_position)
-	
-	if not _is_different_cell(piece.last_valid_pos, target_cell):
-		print("Same cell - no movement")
-		_reset_piece_position(piece)
-		return
-	
-	var target_piece = get_piece_at_position(target_cell, piece)
-	
-	if target_piece:
-		if can_capture(piece.piece_color, target_piece.piece_color):
-			print("Capture allowed")
-			capture_piece(target_piece)
-			_finalize_move(piece, target_cell)
-		else:
-			print("Cannot capture own pieces")
-			_reset_piece_position(piece)
-	else:
-		print("Valid move to empty cell")
-		_finalize_move(piece, target_cell)
-
-func _reset_piece_position(piece):
-	piece.global_position = piece.last_valid_pos
-
-func _finalize_move(piece, target_position):
-	piece.global_position = target_position
-	piece.last_valid_pos = piece.global_position
-	switch_turn()
 
 func get_piece_at_position(position: Vector2, exclude_piece: Node = null) -> Node:
 	var cell_coord = _world_to_board_coord(position)
@@ -154,16 +188,6 @@ func get_piece_at_position(position: Vector2, exclude_piece: Node = null) -> Nod
 	
 	return null
 
-func _world_to_board_coord(world_position: Vector2) -> Vector2:
-	var origin = board.get_board_origin()
-	var cell_size = board.cell_size
-	var local_pos = world_position - origin
-	
-	return Vector2(
-		floor(local_pos.x / cell_size),
-		floor(local_pos.y / cell_size)
-	)
-
 func _is_different_cell(pos1: Vector2, pos2: Vector2) -> bool:
 	var coord1 = _world_to_board_coord(pos1)
 	var coord2 = _world_to_board_coord(pos2)
@@ -176,359 +200,198 @@ func capture_piece(piece_to_capture):
 	print("Capturing: ", piece_to_capture.piece_type)
 	piece_to_capture.queue_free()
 
-func _input(event):
-	_handle_touch_events(event)
-	_handle_debug_keys(event)
-
-func _handle_touch_events(event):
-	if event is InputEventScreenTouch and not event.pressed:
-		for piece in pieces_container.get_children():
-			if piece.has_method("cancel_drag"):
-				piece.cancel_drag()
-
-func _handle_debug_keys(event):
-	if event is InputEventKey and event.pressed and event.keycode == KEY_P:
-		print_all_piece_positions()
-
-func _find_piece_under_mouse(mouse_pos: Vector2) -> Node:
-	print("IMPROVED piece detection for mouse: ", mouse_pos)
-	
-	var closest_piece = null
-	var closest_distance = 1000000.0
-	var detection_radius = 100.0  # AUMENTAR radio de detección
-	
-	for piece in pieces_container.get_children():
-		if piece.has_method("get_programming_status"):
-			var piece_pos = piece.global_position
-			var distance = mouse_pos.distance_to(piece_pos)
-			
-			print("   - ", piece.piece_type, " at ", piece_pos, " distance: ", distance)
-			
-			# Save nearest piece
-			if distance < closest_distance:
-				closest_distance = distance
-				closest_piece = piece
-	
-	if closest_piece and closest_distance < detection_radius:
-		print("CLOSEST piece: ", closest_piece.piece_type, " distance: ", closest_distance)
-		return closest_piece
-	else:
-		print("No piece within ", detection_radius, "px tolerance. Closest: ", 
-			  closest_piece.piece_type if closest_piece else "None", 
-			  " at ", closest_distance, "px")
-		return null
-
 func open_programming_interface_for_piece(piece: Node, mouse_pos: Vector2):
-	print("Opening programming interface for: ", piece.piece_type)
+	print("=== MÉTODO DIRECTO ===")
 	
-	# Close interface
-	if current_programming_interface and is_instance_valid(current_programming_interface):
-		current_programming_interface.queue_free()
-		await get_tree().process_frame
-	
-	# Crear nueva interfaz
+	# Instanciar
 	var new_interface = ProgrammingInterfaceScene.instantiate()
-	get_tree().root.add_child(new_interface)
-	new_interface.z_index = 1000
 	
-	await get_tree().process_frame
-	await get_tree().process_frame
+	# **AGREGAR COMO HIJO DIRECTO DE ESTE NODO (GameManager)**
+	# GameManager está en /root/Main/GameManager
+	add_child(new_interface)
 	
-	new_interface.custom_minimum_size = Vector2(600, 400)
-	new_interface.size = Vector2(600, 400)
+	# Configurar inmediatamente
+	new_interface.visible = true
 	
-	_position_interface_at_camera_right(new_interface)
+	# NO esperar frames adicionales
+	# NO configurar z_index (dejar por defecto)
 	
-	# Setup piece information
+	# Setup inmediato
 	if new_interface.has_method("setup_for_piece"):
 		new_interface.setup_for_piece(piece)
 	
 	current_programming_interface = new_interface
-	print("Programming interface opened successfully at camera right wall")
+	
+	print("Interfaz creada directamente en GameManager")
+	print("Parent path: ", new_interface.get_path())
 
-func _center_interface_on_camera(interface: Control):
-	if not camera:
-		print("No camera reference, falling back to screen center")
-		_center_interface_on_screen(interface)
-		return
-	
-	# Get cam info
-	var camera_center = camera.global_position
-	var camera_zoom = camera.zoom
-	var viewport_size = get_viewport().get_visible_rect().size
-	var interface_size = interface.size
-	
-	print("Detailed camera info:")
-	print("   - Camera position: ", camera_center)
-	print("   - Camera zoom: ", camera_zoom)
-	print("   - Viewport size: ", viewport_size)
-	
-	# Cam area for zoom
-	var visible_rect = Rect2(
-		camera_center - (viewport_size * camera_zoom) / 2,
-		viewport_size * camera_zoom
-	)
-	
-	print("   - Visible area: ", visible_rect)
-	
-	var target_position = Vector2()
-	target_position.x = visible_rect.position.x + visible_rect.size.x - interface_size.x - 20  # 🔥 20px de margen desde el borde derecho
-	target_position.y = visible_rect.position.y + (visible_rect.size.y - interface_size.y) / 2  # 🔥 Centrada verticalmente
-	
-	target_position = _convert_to_global_position(target_position)
-	
-	interface.global_position = target_position
-	
-	print(" Interface positioned at camera right wall:")
-	print("   - Target position: ", target_position)
-	print("   - Final position: ", interface.global_position)
-
-func _convert_to_global_position(local_pos: Vector2) -> Vector2:
-	return local_pos
-
-func _center_interface_on_screen(interface: Control):
+func _position_interface_smartly(interface: Control):
 	var screen_size = get_viewport().get_visible_rect().size
 	var interface_size = interface.size
 	
-	var target_position = Vector2(
-		(screen_size.x - interface_size.x) / 2,
-		(screen_size.y - interface_size.y) / 2
-	)
+	print("Posicionando interfaz:")
+	print("  Pantalla: ", screen_size)
+	print("  Interfaz: ", interface_size)
 	
-	interface.global_position = target_position
-	print(" Fallback: Centered on screen: ", target_position)
-
-func _get_piece_global_rect(piece) -> Rect2:
-	var piece_size = piece.texture.get_size() if piece.texture else Vector2(80, 80)
-	var piece_top_left = piece.global_position - piece_size / 2
-	return Rect2(piece_top_left, piece_size)
-
-func _calculate_smart_interface_position(mouse_pos: Vector2, interface_size: Vector2, screen_size: Vector2) -> Vector2:
-	print(" PRECISE positioning for mouse: ", mouse_pos)
-	
+	# Calcular posición óptima
 	var target_position = Vector2()
 	
-	target_position.x = mouse_pos.x + 20
+	# 1. Intentar posición derecha-centro
+	target_position.x = screen_size.x - interface_size.x - 20
+	target_position.y = (screen_size.y - interface_size.y) / 2
 	
-	var available_space_above = mouse_pos.y - interface_size.y - 20
-	var available_space_below = screen_size.y - (mouse_pos.y + 20) - interface_size.y
+	# 2. Si no cabe a la derecha, poner a la izquierda
+	if target_position.x < 20:
+		target_position.x = 20
 	
-	print(" Space analysis - Above: ", available_space_above, " Below: ", available_space_below)
-	
-	if available_space_below >= available_space_above and available_space_below > 50:
-		# More space bellow
-		target_position.y = mouse_pos.y + 20
-		print(" Strategy: BELOW mouse (more space below)")
-	elif available_space_above > 50:
-		# More space above
-		target_position.y = mouse_pos.y - interface_size.y - 20
-		print(" Strategy: ABOVE mouse (more space above)")
-	else:
-		# Use just in case of few space
-		var ideal_center = mouse_pos.y - interface_size.y / 2
-		target_position.y = clamp(ideal_center, 10, screen_size.y - interface_size.y - 10)
-		print(" Strategy: CENTERED (limited space)")
-	
-	if target_position.x + interface_size.x > screen_size.x - 10:
-		target_position.x = mouse_pos.x - interface_size.x - 20
-		print(" Adjusting: moved to left side")
-	
+	# 3. Asegurar que esté dentro de la pantalla
 	target_position.x = clamp(target_position.x, 10, screen_size.x - interface_size.x - 10)
 	target_position.y = clamp(target_position.y, 10, screen_size.y - interface_size.y - 10)
 	
-	print(" Final position: ", target_position)
-	return target_position
-
-func _find_best_adjusted_position(mouse_pos: Vector2, interface_size: Vector2, screen_size: Vector2) -> Vector2:
-	
-	var ideal_pos = mouse_pos + Vector2(20, 20)
-	var adjusted_pos = ideal_pos
-	
-	if ideal_pos.x + interface_size.x > screen_size.x:
-		adjusted_pos.x = mouse_pos.x - interface_size.x - 20
-	elif ideal_pos.x < 0:
-		adjusted_pos.x = 10
-	
-	# Vertical
-	if ideal_pos.y + interface_size.y > screen_size.y:
-		var above_pos = mouse_pos.y - interface_size.y - 20
-		var centered_pos = mouse_pos.y - interface_size.y / 2
-		
-		var distance_above = abs(above_pos + interface_size.y / 2 - mouse_pos.y)
-		var distance_centered = abs(centered_pos + interface_size.y / 2 - mouse_pos.y)
-		
-		if distance_centered < distance_above and centered_pos >= 0 and centered_pos + interface_size.y <= screen_size.y:
-			adjusted_pos.y = centered_pos
-		else:
-			adjusted_pos.y = above_pos
-	elif ideal_pos.y < 0:
-		adjusted_pos.y = 10
-	
-	# limits
-	adjusted_pos.x = clamp(adjusted_pos.x, 10, screen_size.x - interface_size.x - 10)
-	adjusted_pos.y = clamp(adjusted_pos.y, 10, screen_size.y - interface_size.y - 10)
-	
-	print(" Adjusted position - Mouse: ", mouse_pos, " -> Interface: ", adjusted_pos)
-	return adjusted_pos
-
-func _calculate_best_interface_position(piece: Node, mouse_pos: Vector2, interface_size: Vector2, screen_size: Vector2) -> Vector2:
-	# Option 1
-	var mouse_based_pos = mouse_pos + Vector2(20, 20)
-	
-	# Option 2
-	var piece_based_pos = Vector2(
-		piece.global_position.x - interface_size.x / 2,
-		piece.global_position.y + 80
-	)
-	
-	# Screen fitness
-	var mouse_fits = _position_fits_in_screen(mouse_based_pos, interface_size, screen_size)
-	var piece_fits = _position_fits_in_screen(piece_based_pos, interface_size, screen_size)
-	
-	if mouse_fits:
-		return _clamp_position_to_screen(mouse_based_pos, interface_size, screen_size)
-	else:
-		return _clamp_position_to_screen(piece_based_pos, interface_size, screen_size)
-
-func _position_fits_in_screen(position: Vector2, size: Vector2, screen_size: Vector2) -> bool:
-	var margin = 5
-	return (position.x >= margin and 
-			position.y >= margin and 
-			position.x + size.x <= screen_size.x - margin and 
-			position.y + size.y <= screen_size.y - margin)
-
-func _clamp_position_to_screen(position: Vector2, size: Vector2, screen_size: Vector2) -> Vector2:
-	return Vector2(
-		clamp(position.x, 10, screen_size.x - size.x - 10),
-		clamp(position.y, 10, screen_size.y - size.y - 10)
-	)
-
-func _calculate_interface_position(global_mouse_pos: Vector2, interface_size: Vector2) -> Vector2:
-	var screen_size = get_viewport().get_visible_rect().size
-	var target = global_mouse_pos + Vector2(20, 20)
-	
-	target.x = clamp(target.x, 10, screen_size.x - interface_size.x - 10)
-	target.y = clamp(target.y, 10, screen_size.y - interface_size.y - 10)
-	
-	print(" Calculated position - Mouse: ", global_mouse_pos, " Target: ", target)
-	return target
-
-func _position_interface_at_mouse(interface: Control, mouse_pos: Vector2):
-	print(" === POSITIONING ===")
-	print("   - Mouse position: ", mouse_pos)
-	
-	var screen_size = get_viewport().get_visible_rect().size
-	var target_position = mouse_pos + Vector2(20, 20)
-	
-	target_position.x = clamp(target_position.x, 10, screen_size.x - interface.size.x - 10)
-	target_position.y = clamp(target_position.y, 10, screen_size.y - interface.size.y - 10)
-	
-	interface.global_position = target_position
-	
-	print("   - Final position: ", interface.global_position)
-	print("=== END ===")
-
-func _position_interface_before_adding(interface: Control, mouse_pos: Vector2):
-	print("=== PRE-POSITIONING ===")
-	print("   - Target mouse position: ", mouse_pos)
-	
-	var screen_size = get_viewport().get_visible_rect().size
-	var target_position = mouse_pos + Vector2(20, 20)
-	
-	# Don't get out of screen
-	target_position.x = clamp(target_position.x, 10, screen_size.x - interface.size.x - 10)
-	target_position.y = clamp(target_position.y, 10, screen_size.y - interface.size.y - 10)
-	
 	interface.position = target_position
-	
-	print("   - Pre-set position: ", target_position)
-	print("=== END ===")
+	print("  Posición final: ", target_position)
 
-func _on_piece_right_clicked(piece):
-	print("Piece right_clicked signal received: ", piece.piece_type)
-	print("   - Piece position: ", piece.global_position)
-	print("   - Piece color: ", piece.piece_color)
-	print("   - Piece type: ", piece.piece_type)
+# Función auxiliar para debug
+func _debug_canvas_layers():
+	print("=== DEBUG CANVAS LAYERS ===")
 	
-	# Surrender to mouse position
+	# Buscar en root
+	for child in get_tree().root.get_children():
+		print(child.name, " (", child.get_class(), ")")
+		if child is CanvasLayer:
+			print("  -> Es CanvasLayer con ", child.get_child_count(), " hijos")
+			for subchild in child.get_children():
+				print("    - ", subchild.name, " (", subchild.get_class(), ")")
+	
+	# Buscar en Main
+	var main = get_node_or_null("/root/Main")
+	if main:
+		print("\nEn Main:")
+		for child in main.get_children():
+			print("  ", child.name, " (", child.get_class(), ")")
+	
+	print("=== FIN DEBUG ===\n")
+
+func _get_or_create_canvas_layer() -> CanvasLayer:
+	# Buscar CanvasLayer existente
+	var main = get_node_or_null("/root/Main")
+	if main:
+		# Buscar en Main
+		var canvas_layer = main.get_node_or_null("CanvasLayer")
+		if canvas_layer:
+			return canvas_layer
+		
+		# Crear si no existe
+		canvas_layer = CanvasLayer.new()
+		canvas_layer.name = "CanvasLayer"
+		main.add_child(canvas_layer)
+		return canvas_layer
+	
+	# Fallback: buscar en root
+	var root = get_tree().root
+	for child in root.get_children():
+		if child is CanvasLayer:
+			return child
+	
+	# Crear nuevo
+	var new_canvas = CanvasLayer.new()
+	new_canvas.name = "CanvasLayer"
+	root.add_child(new_canvas)
+	return new_canvas
+
+func _open_interface_fallback(piece: Node):
+	print("=== INTENTANDO FALLBACK ===")
+	
+	# Método ultra simple
+	var control = Control.new()
+	control.name = "ProgrammingInterface_Fallback"
+	control.custom_minimum_size = Vector2(600, 400)
+	control.size = Vector2(600, 400)
+	control.visible = true
+	
+	# Fondo
+	var bg = ColorRect.new()
+	bg.color = Color(0.1, 0.1, 0.2, 0.95)
+	bg.size = control.size
+	control.add_child(bg)
+	
+	# Título
+	var label = Label.new()
+	label.text = "Programando: " + piece.piece_color + " " + piece.piece_type
+	label.position = Vector2(20, 20)
+	label.add_theme_font_size_override("font_size", 20)
+	control.add_child(label)
+	
+	# Botón cerrar
+	var close_btn = Button.new()
+	close_btn.text = "Cerrar"
+	close_btn.position = Vector2(250, 350)
+	close_btn.size = Vector2(100, 40)
+	close_btn.pressed.connect(func():
+		print("Cerrando interfaz fallback")
+		control.queue_free()
+		current_programming_interface = null
+	)
+	control.add_child(close_btn)
+	
+	# Agregar al GameManager
+	add_child(control)
+	
+	# Posicionar
+	var screen_size = get_viewport().get_visible_rect().size
+	control.position = Vector2(
+		screen_size.x - control.size.x - 50,
+		(screen_size.y - control.size.y) / 2
+	)
+	
+	current_programming_interface = control
+	print("Interfaz fallback creada")
+
+# También modificar _on_piece_right_clicked para debug:
+func _on_piece_right_clicked(piece):
+	print("=== CLICK DERECHO EN PIEZA ===")
+	print("Pieza: ", piece.piece_type)
+	print("Color: ", piece.piece_color)
+	print("Turno actual: ", current_turn)
+	print("Posición: ", piece.global_position)
+	
 	open_programming_interface_for_piece(piece, piece.global_position)
 
-# === SISTEMA DE TURNOS ===
-func is_valid_turn(piece_color: String) -> bool:
-	return piece_color == current_turn
-
-func switch_turn():
-	current_turn = "black" if current_turn == "white" else "white"
-	print("Turn changed to: ", current_turn)
-	update_turn_display()
-
-func update_turn_display():
-	if turn_display and turn_display.has_method("update_turn"):
-		turn_display.update_turn(current_turn)
-
-# === Close manager ===
-func _on_programming_interface_closed():
-	print("Programming interface closed from GameManager")
-	current_programming_interface = null
-	is_opening_interface = false  # RESETEAR ESTADO
-
-# === DEBUG UTILITIES ===
-func print_all_piece_positions():
-	print("=== ALL PIECE POSITIONS ===")
-	for piece in pieces_container.get_children():
-		var coord = _world_to_board_coord(piece.global_position)
-		print("Piece:", piece.piece_type, " at cell:", coord)
-	print("===========================")
-
-func _test_block_system():
-	print("=== BLOCK SYSTEM TEST ===")
-	if BlockSystem:
-		var pawn_ram = BlockSystem.get_piece_ram_capacity("pawn")
-		print("Pawn RAM capacity: ", pawn_ram)
-	else:
-		print("BlockSystem not found")
-
-func _connect_piece_signals():
-	print("Connecting piece signals...")
-	var connected_count = 0
+func _simple_open_interface(piece: Node):
+	# Método alternativo más simple
+	var new_interface = ProgrammingInterfaceScene.instantiate()
 	
-	for piece in pieces_container.get_children():
-		if piece.has_signal("right_clicked"):
-			if not piece.right_clicked.is_connected(_on_piece_right_clicked):
-				piece.right_clicked.connect(_on_piece_right_clicked)
-				connected_count += 1
-				print("Connected to: ", piece.piece_type)
-		else:
-			print("No right_clicked signal in: ", piece.piece_type)
-	
-	print("Connected to ", connected_count, " pieces")
+	# Agregar como hijo directo de Main
+	var main_node = get_node("/root/Main")
+	if main_node:
+		main_node.add_child(new_interface)
+		
+		# Configurar propiedades básicas
+		new_interface.position = Vector2(100, 100)
+		new_interface.size = Vector2(600, 400)
+		new_interface.visible = true
+		
+		if new_interface.has_method("setup_for_piece"):
+			new_interface.setup_for_piece(piece)
+		
+		current_programming_interface = new_interface
+		print("Interface opened with fallback method")
 
 func _position_interface_at_camera_right(interface: Control):
-	if not camera:
-		print("No camera reference, falling back to screen right")
-		_position_interface_at_screen_right(interface)
+	if not interface:
+		print("ERROR: Interface is null")
 		return
 	
-	var camera_center = camera.global_position
-	var camera_zoom = camera.zoom
-	var viewport_size = get_viewport().get_visible_rect().size
-	var interface_size = interface.size
+	# Usar una posición fija y segura
+	var screen_size = get_viewport().get_visible_rect().size
 	
-	var visible_rect = Rect2(
-		camera_center - (viewport_size * camera_zoom) / 2,
-		viewport_size * camera_zoom
+	# Posición en el lado derecho de la pantalla
+	interface.position = Vector2(
+		screen_size.x - interface.size.x - 20,
+		(screen_size.y - interface.size.y) / 2
 	)
 	
-	var target_position = Vector2()
-	target_position.x = visible_rect.position.x + visible_rect.size.x - interface_size.x - 20  # Margen derecho de 20px
-	target_position.y = visible_rect.position.y + (visible_rect.size.y - interface_size.y) / 2  # Centrada verticalmente
-	
-	interface.global_position = target_position
-	
-	print("Interface positioned at camera right:")
-	print("   - Camera view: ", visible_rect)
-	print("   - Interface size: ", interface_size)
-	print("   - Final position: ", target_position)
+	print("Interface positioned at: ", interface.position)
 
 # FUNCIÓN DE RESPALDO: Posiciona en el lado derecho de la pantalla
 func _position_interface_at_screen_right(interface: Control):
@@ -542,3 +405,457 @@ func _position_interface_at_screen_right(interface: Control):
 	
 	interface.global_position = target_position
 	print("Fallback: Positioned at screen right: ", target_position)
+# === SISTEMA DE TURNOS ===
+func is_valid_turn(piece_color: String) -> bool:
+	return piece_color == current_turn
+
+func switch_turn():
+	current_turn = "black" if current_turn == "white" else "white"
+	print("Turn changed to: ", current_turn)
+	update_turn_display()
+	
+	# Actualizar estado de todas las piezas después de cambiar turno
+	_update_pieces_input_state()
+
+func _update_pieces_input_state():
+	for piece in pieces_container.get_children():
+		if piece.has_node("Area2D"):
+			var area2d = piece.get_node("Area2D")
+			
+			if piece.piece_color == current_turn:
+				area2d.input_pickable = true
+				area2d.monitoring = true
+				piece.modulate = Color.WHITE
+			else:
+				area2d.input_pickable = false
+				area2d.monitoring = false
+				piece.modulate = Color(0.5, 0.5, 0.5, 0.7)
+
+func update_turn_display():
+	if turn_display and turn_display.has_method("update_turn"):
+		turn_display.update_turn(current_turn)
+
+# === Close manager ===
+func _on_programming_interface_closed():
+	print("Programming interface closed from GameManager")
+	
+	if current_programming_interface and is_instance_valid(current_programming_interface):
+		# Solo limpiar la referencia, el nodo ya se eliminó
+		current_programming_interface = null
+	
+	is_opening_interface = false
+	
+	# Asegurar que todas las piezas estén en el estado correcto
+	_update_pieces_input_state()
+
+# === DEBUG UTILITIES ===
+func print_all_piece_positions():
+	print("=== ALL PIECE POSITIONS ===")
+	for piece in pieces_container.get_children():
+		var coord = _world_to_board_coord(piece.global_position)
+		print("Piece:", piece.piece_type, " at cell:", coord)
+	print("===========================")
+
+func _test_block_system():
+	print("=== TEST BLOCK SYSTEM DEBUG ===")
+	
+	# Verificar si BlockSystem existe
+	if not BlockSystem:
+		print("ERROR: BlockSystem no está cargado")
+		return
+	
+	print("BlockSystem encontrado")
+	
+	# Probar obtener un bloque
+	var test_block = BlockSystem.get_block_info("move_forward")
+	print("Bloque 'move_forward':")
+	print("  Tipo: ", typeof(test_block))
+	print("  Es diccionario: ", test_block is Dictionary)
+	print("  Contenido: ", test_block)
+	print("  Tiene 'name': ", "name" in test_block if test_block is Dictionary else "N/A")
+	print("  Tiene 'ram_cost': ", "ram_cost" in test_block if test_block is Dictionary else "N/A")
+	
+	# Si el bloque está vacío, usar valores por defecto
+	if test_block.is_empty():
+		print("ADVERTENCIA: get_block_info devolvió diccionario vacío")
+		# Crear bloque de prueba manualmente
+		test_block = {
+			"name": "Mover Adelante",
+			"ram_cost": 2,
+			"category": "movement",
+			"description": "Avanza una casilla hacia adelante"
+		}
+		print("  Usando bloque de prueba: ", test_block)
+	
+	print("=== FIN TEST ===\n")
+
+func _connect_piece_signals():
+	print("Connecting piece signals...")
+	var connected_count = 0
+	
+	for piece in pieces_container.get_children():
+		# Conectar señal right_clicked si existe
+		if piece.has_signal("right_clicked"):
+			if not piece.right_clicked.is_connected(_on_piece_right_clicked):
+				piece.right_clicked.connect(_on_piece_right_clicked)
+				connected_count += 1
+				print("Connected right_clicked to: ", piece.piece_type)
+		
+		# Configurar estado inicial del Área2D
+		if piece.has_node("Area2D"):
+			var area2d = piece.get_node("Area2D")
+			
+			# Inicialmente solo las blancas pueden programarse
+			if piece.piece_color == current_turn:
+				area2d.input_pickable = true
+				area2d.monitoring = true
+				piece.modulate = Color.WHITE
+			else:
+				area2d.input_pickable = false
+				area2d.monitoring = false
+				piece.modulate = Color(0.5, 0.5, 0.5, 0.7)
+	
+	print("Connected to ", connected_count, " pieces")
+	print("Input configured for current turn: ", current_turn)
+
+# ==============================================
+# NUEVO SISTEMA DE PROGRAMACIÓN POR BLOQUES
+# ==============================================
+
+func start_programming_phase():
+	print("=== FASE DE PROGRAMACIÓN ===")
+	print("Turno: ", current_turn)
+	execution_phase = false
+	
+	# Habilitar/deshabilitar la detección de input por Área2D
+	for piece in pieces_container.get_children():
+		if piece.has_node("Area2D"):
+			var area2d = piece.get_node("Area2D")
+			
+			if piece.piece_color == current_turn:
+				# Habilitar detección para piezas del turno actual
+				area2d.input_pickable = true
+				area2d.monitoring = true
+				piece.modulate = Color.WHITE  # Color normal
+			else:
+				# Deshabilitar detección para piezas del oponente
+				area2d.input_pickable = false
+				area2d.monitoring = false
+				piece.modulate = Color(0.5, 0.5, 0.5, 0.7)  # Grisado
+
+func start_programming_timer(seconds: float):
+	var timer = Timer.new()
+	add_child(timer)
+	timer.wait_time = seconds
+	timer.timeout.connect(func():
+		print("Tiempo de programación terminado")
+		timer.queue_free()
+		start_execution_phase()
+	)
+	timer.start()
+	print("Temporizador de programación iniciado: ", seconds, " segundos")
+
+func start_execution_phase():
+	print("=== FASE DE EJECUCIÓN ===")
+	execution_phase = true
+	programmed_moves.clear()
+	
+	# Recolectar todos los programas
+	for piece in pieces_container.get_children():
+		if piece.piece_color == current_turn and piece.is_programmed:
+			programmed_moves.append({"piece": piece, "script": piece.behavior_script})
+			print("Programa encontrado para: ", piece.piece_type)
+	
+	if programmed_moves.is_empty():
+		print("No hay programas para ejecutar, pasando turno")
+		end_turn()
+	else:
+		print("Ejecutando ", programmed_moves.size(), " programas")
+		execute_programs_sequentially()
+
+func execute_programs_sequentially():
+	var index = 0
+	
+	if execution_timer:
+		execution_timer.queue_free()
+	
+	execution_timer = Timer.new()
+	add_child(execution_timer)
+	execution_timer.wait_time = 1.0  # 1 segundo entre movimientos
+	
+	execution_timer.timeout.connect(func():
+		if index < programmed_moves.size():
+			var data = programmed_moves[index]
+			print("Ejecutando programa ", index + 1, "/", programmed_moves.size())
+			execute_piece_program(data["piece"])
+			index += 1
+		else:
+			execution_timer.queue_free()
+			execution_timer = null
+			print("Todos los programas ejecutados")
+			end_turn()
+	)
+	
+	execution_timer.start()
+
+func execute_piece_program(piece):
+	print("Ejecutando programa para: ", piece.piece_type)
+	piece.reset_execution()
+	var result = piece.execute_next_command()
+	
+	while result:
+		process_command_result(piece, result)
+		result = piece.execute_next_command()
+	
+	print("Programa completado para: ", piece.piece_type)
+
+func process_command_result(piece, command):
+	print("Procesando comando: ", command.get("action"))
+	
+	match command.get("action"):
+		"move":
+			var target = command["target"]
+			if is_valid_move(piece, target):
+				move_piece_to(piece, target)
+			else:
+				print("Movimiento no válido para ", piece.piece_type)
+		"move_options":
+			var targets = command["targets"]
+			# Ejecutar el primer movimiento válido
+			for target in targets:
+				if is_valid_move(piece, target):
+					move_piece_to(piece, target)
+					break
+		"capture":
+			var direction = command.get("direction", "front")
+			attempt_capture(piece, direction)
+		"condition":
+			print("Condición evaluada: ", command.get("check"))
+		_:
+			print("Comando desconocido: ", command.get("action"))
+
+func is_valid_move(piece: Node, target_cell: Vector2) -> bool:
+	# Verificar que la celda esté dentro del tablero
+	if target_cell.x < 0 or target_cell.x >= 8 or target_cell.y < 0 or target_cell.y >= 8:
+		print("Celda fuera del tablero")
+		return false
+	
+	# Verificar que no haya una pieza del mismo color en la celda objetivo
+	var target_world_pos = _board_to_world_position(target_cell)
+	var piece_at_target = get_piece_at_position(target_world_pos)
+	
+	if piece_at_target:
+		if piece_at_target.piece_color == piece.piece_color:
+			print("Hay una pieza aliada en la celda objetivo")
+			return false
+	
+	# Verificar movimiento básico según el tipo de pieza
+	# (Esta es una versión simplificada para el juego educativo)
+	return _is_basic_move_valid(piece, target_cell)
+
+func _is_basic_move_valid(piece: Node, target_cell: Vector2) -> bool:
+	var current_cell = piece.board_position
+	var delta = target_cell - current_cell
+	
+	match piece.piece_type:
+		"pawn":
+			var direction = -1 if piece.piece_color == "white" else 1
+			# Movimiento básico del peón: una casilla adelante
+			if delta == Vector2(0, direction):
+				return true
+			# Primer movimiento: dos casillas
+			if (piece.piece_color == "white" and current_cell.y == 6) or \
+			   (piece.piece_color == "black" and current_cell.y == 1):
+				if delta == Vector2(0, 2 * direction):
+					return true
+			return false
+		
+		"bishop":
+			# Alfil: movimiento diagonal
+			return abs(delta.x) == abs(delta.y)
+		
+		"horse":
+			# Caballo: movimiento en L
+			var abs_delta = delta.abs()
+			return (abs_delta.x == 1 and abs_delta.y == 2) or \
+				   (abs_delta.x == 2 and abs_delta.y == 1)
+		
+		"tower":
+			# Torre: movimiento horizontal o vertical
+			return delta.x == 0 or delta.y == 0
+		
+		"queen":
+			# Reina: movimiento horizontal, vertical o diagonal
+			return delta.x == 0 or delta.y == 0 or abs(delta.x) == abs(delta.y)
+		
+		"king":
+			# Rey: movimiento una casilla en cualquier dirección
+			return abs(delta.x) <= 1 and abs(delta.y) <= 1
+	
+	return true  # Para pruebas, permitir cualquier movimiento
+
+func move_piece_to(piece: Node, target_cell: Vector2):
+	print("Moviendo ", piece.piece_type, " a ", target_cell)
+	
+	# Verificar si hay una pieza en la celda objetivo para capturar
+	var target_world_pos = _board_to_world_position(target_cell)
+	var piece_at_target = get_piece_at_position(target_world_pos)
+	
+	if piece_at_target:
+		if piece_at_target.piece_color != piece.piece_color:
+			print("Capturando pieza enemiga: ", piece_at_target.piece_type)
+			capture_piece(piece_at_target)
+		else:
+			print("No se puede mover a casilla ocupada por aliado")
+			return
+	
+	# Actualizar posición en tablero
+	piece.board_position = target_cell
+	
+	# Animación del movimiento
+	var tween = create_tween()
+	tween.tween_property(piece, "position", target_world_pos, 0.3)
+	
+	print("Movimiento completado")
+
+func attempt_capture(piece: Node, direction: String):
+	print("Intentando captura con ", piece.piece_type, " en dirección ", direction)
+	
+	var target_cell = piece.board_position
+	
+	match direction:
+		"front":
+			var dir = -1 if piece.piece_color == "white" else 1
+			target_cell += Vector2(0, dir)
+		"diagonal_left":
+			var dir = -1 if piece.piece_color == "white" else 1
+			target_cell += Vector2(-1, dir)
+		"diagonal_right":
+			var dir = -1 if piece.piece_color == "white" else 1
+			target_cell += Vector2(1, dir)
+	
+	if is_valid_move(piece, target_cell):
+		move_piece_to(piece, target_cell)
+
+func end_turn():
+	print("=== FIN DEL TURNO ===")
+	
+	# Limpiar programas ejecutados
+	programmed_moves.clear()
+	execution_phase = false
+	
+	# Cambiar turno
+	switch_turn()
+	
+	# Iniciar siguiente fase de programación
+	await get_tree().create_timer(1.0).timeout
+	start_programming_phase()
+
+# Función para iniciar ejecución manual (para testing)
+func start_execution_manually():
+	if not execution_phase:
+		start_execution_phase()
+
+# Función para saltar a la siguiente fase (para testing)
+func skip_to_next_phase():
+	if execution_phase:
+		if execution_timer:
+			execution_timer.queue_free()
+			execution_timer = null
+		end_turn()
+	else:
+		start_execution_phase()
+
+func highlight_programmable_pieces():
+	for piece in pieces_container.get_children():
+		if piece.piece_color == current_turn:
+			# Resaltar piezas que se pueden programar
+			var tween = create_tween()
+			tween.tween_property(piece, "modulate", Color(1.2, 1.2, 1.0, 1.0), 0.3)
+			tween.tween_property(piece, "modulate", Color.WHITE, 0.3)
+			tween.set_loops()
+
+func debug_scene_tree():
+	print("=== SCENE TREE DEBUG ===")
+	print("Root children: ", get_tree().root.get_child_count())
+	for child in get_tree().root.get_children():
+		print("  - ", child.name, " (", child.get_class(), ")")
+	print("=======================")
+
+#Debug
+# En game_manager.gd, después de crear piezas:
+func verify_chess_setup():
+	print("\n=== VERIFICACIÓN DE AJEDREZ ===")
+	
+	# Coordenadas esperadas (para 1360x768, celda 80px)
+	var board_center = Vector2(680, 384)
+	var cell_size = 80.0
+	
+	print("Centro tablero: ", board_center)
+	print("Tamaño celda: ", cell_size)
+	
+	# Verificar posiciones clave
+	var test_cells = [
+		Vector2(0, 0),  # Torre negra izquierda (A8)
+		Vector2(7, 0),  # Torre negra derecha (H8)
+		Vector2(0, 7),  # Torre blanca izquierda (A1)
+		Vector2(7, 7),  # Torre blanca derecha (H1)
+		Vector2(3, 0),  # Reina negra
+		Vector2(4, 0),  # Rey negro
+		Vector2(3, 7),  # Reina blanca
+		Vector2(4, 7),  # Rey blanco
+	]
+	
+	for cell in test_cells:
+		var expected_x = board_center.x - (4 * cell_size) + (cell.x * cell_size) + (cell_size / 2)
+		var expected_y = board_center.y - (4 * cell_size) + (cell.y * cell_size) + (cell_size / 2)
+		
+		print("Celda ", cell, " debería estar en: (", expected_x, ", ", expected_y, ")")
+	
+	# Verificar piezas reales
+	for piece in pieces_container.get_children():
+		var cell = _world_to_board_coord(piece.global_position)
+		print(piece.piece_color, " ", piece.piece_type, " en celda: ", cell)
+	
+	print("================================\n")
+
+func debug_canvas_layer():
+	print("=== DEBUG CANVASLAYER ===")
+	
+	var canvas_layer = get_node_or_null("/root/Main/CanvasLayer")
+	if canvas_layer:
+		print("CanvasLayer encontrado")
+		print("  Posición: ", canvas_layer.position)
+		print("  Tamaño: ", canvas_layer.size)
+		print("  Hijos: ", canvas_layer.get_child_count())
+		
+		for child in canvas_layer.get_children():
+			print("  - ", child.name, " (", child.get_class(), ")")
+	else:
+		print("ERROR: CanvasLayer no encontrado")
+	
+	print("========================")
+ 
+func debug_block_system():
+	print("=== DEBUG BLOCK SYSTEM ===")
+	
+	# Verificar BlockSystem
+	if not BlockSystem:
+		print("ERROR: BlockSystem is null")
+		return
+	
+	print("BlockSystem loaded successfully")
+	
+	# Verificar métodos
+	var methods = ["get_block_info", "get_piece_ram_capacity", "calculate_ram_usage"]
+	for method in methods:
+		if BlockSystem.has_method(method):
+			print("✓ ", method, " exists")
+		else:
+			print("✗ ", method, " missing")
+	
+	# Probar obtener un bloque
+	var test_block = BlockSystem.get_block_info("move_forward")
+	print("Test block 'move_forward': ", test_block)
+	
+	print("=== END DEBUG ===")

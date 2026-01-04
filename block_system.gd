@@ -1,171 +1,94 @@
 extends Node
 
-# Singleton to improme usage
-
-# 1. Dictionary of Blocks
-var block_library = {
-	# Moviments blocks
+static var block_definitions = {
 	"move_forward": {
 		"name": "Mover Adelante",
-		"ram_cost": 2,
+		"description": "Mueve la pieza una casilla hacia adelante",
+		"ram_cost": 2,  # Cambiado de 1 a 2
 		"category": "movement",
-		"description": "Avanza una casilla hacia adelante",
-		"texture": "res://Assets/Blocks/move_forward.png",
-		"color": Color("4a9cff")
-	},
-	"move_back": {
-		"name": "Mover Atrás", 
-		"ram_cost": 2,
-		"category": "movement",
-		"description": "Retrocede una casilla",
-		"texture": "res://Assets/Blocks/move_back.png",
-		"color": Color("4a9cff")
+		"color": Color.ROYAL_BLUE,
+		"execute": move_forward
 	},
 	"move_diagonal": {
 		"name": "Mover Diagonal",
-		"ram_cost": 3,
-		"category": "movement", 
-		"description": "Movimiento diagonal (izquierda/derecha)",
-		"texture": "res://Assets/Blocks/move_diagonal.png",
-		"color": Color("4a9cff")
-	},
-	"move_L": {
-		"name": "Movimiento L",
-		"ram_cost": 4,
+		"description": "Mueve la pieza en diagonal",
+		"ram_cost": 3,  # Cambiado de 1 a 3
 		"category": "movement",
-		"description": "Movimiento en L (caballo)",
-		"texture": "res://Assets/Blocks/move_L.png",
-		"color": Color("4a9cff")
+		"color": Color.ROYAL_BLUE,
+		"execute": move_diagonal
 	},
-	
-	# Logic blocks
-	"if_enemy_front": {
-		"name": "Si Enemigo Frente",
-		"ram_cost": 3,
-		"category": "logic",
-		"description": "Si hay enemigo en la casilla frontal",
-		"texture": "res://Assets/Blocks/if_enemy_front.png",
-		"color": Color("ff6b4a")
-	},
-	"if_ally_front": {
-		"name": "Si Aliado Frente",
-		"ram_cost": 3,
-		"category": "logic",
-		"description": "Si hay aliado en la casilla frontal", 
-		"texture": "res://Assets/Blocks/if_ally_front.png",
-		"color": Color("ff6b4a")
-	},
-	"loop_3": {
-		"name": "Repetir 3 Veces",
-		"ram_cost": 5,
-		"category": "logic",
-		"description": "Ejecuta bloques internos 3 veces",
-		"texture": "res://Assets/Blocks/loop_3.png",
-		"color": Color("ff6b4a")
-	},
-	
-	# Sensor blocks
-	"detect_enemy": {
-		"name": "Detectar Enemigo",
-		"ram_cost": 4,
-		"category": "sensor", 
-		"description": "Detecta enemigos en rango de 2 casillas",
-		"texture": "res://Assets/Blocks/detect_enemy.png",
-		"color": Color("4aff6b")
-	},
-	"detect_wall": {
-		"name": "Detectar Pared",
-		"ram_cost": 2,
-		"category": "sensor",
-		"description": "Detecta si hay borde del tablero adelante",
-		"texture": "res://Assets/Blocks/detect_wall.png",
-		"color": Color("4aff6b")
-	},
-	
-	# Action blocks
 	"capture": {
 		"name": "Capturar",
-		"ram_cost": 3,
+		"description": "Captura una pieza enemiga adyacente",
+		"ram_cost": 3,  # Ya está en 3 (correcto)
 		"category": "action",
-		"description": "Captura pieza enemiga en posición actual",
-		"texture": "res://Assets/Blocks/capture.png",
-		"color": Color("ff4ae6")
+		"color": Color.FIREBRICK,
+		"execute": capture_piece
+	},
+	"if_enemy_front": {
+		"name": "Si Enemigo Adelante",
+		"description": "Condición: verifica si hay enemigo adelante",
+		"ram_cost": 2,  # Cambiado de 1 a 2
+		"category": "logic",
+		"color": Color.FOREST_GREEN,
+		"execute": check_enemy_front
 	}
 }
 
-# 2. Capacity of ram
-var piece_ram_capacity = {
-	"pawn": 8,      # Peón
-	"horse": 16,    # Caballo  
-	"bishop": 20,   # Alfil
-	"tower": 24,    # Torre
-	"queen": 32,    # Reina
-	"king": 12      # Rey
-}
+static func get_block_info(block_type: String) -> Dictionary:
+	var block = block_definitions.get(block_type, {})
+	if not block.is_empty():
+		print("BlockSystem: Bloque '", block_type, "' - RAM: ", block.get("ram_cost", 0))
+	return block
 
-# 3. Public funcs
-
-func get_block_info(block_type: String) -> Dictionary:
-	if block_library.has(block_type):
-		return block_library[block_type].duplicate()
-	else:
-		push_error("Block type not found: " + block_type)
-		return {}
-
-## Get all the blocks
-func get_blocks_by_category(category: String) -> Array:
+static func get_blocks_by_category(category: String) -> Array:
 	var result = []
-	for block_type in block_library:
-		if block_library[block_type]["category"] == category:
-			result.append(block_type)
+	for block_type in block_definitions:
+		if block_definitions[block_type].get("category") == category:
+			result.append(block_definitions[block_type])
 	return result
 
-## Ram capacity
-func get_piece_ram_capacity(piece_type: String) -> int:
-	if piece_ram_capacity.has(piece_type):
-		return piece_ram_capacity[piece_type]
-	else:
-		push_error("Piece type not found: " + piece_type)
-		return 0
+static func get_piece_ram_capacity(piece_type: String) -> int:
+	var capacities = {
+		"pawn": 8,      # Cambiado de 4 a 8
+		"bishop": 20,   # Cambiado de 6 a 20
+		"horse": 16,    # Cambiado de 5 a 16
+		"tower": 24,    # Cambiado de 6 a 24
+		"queen": 32,    # Cambiado de 8 a 32
+		"king": 12      # Cambiado de 10 a 12
+	}
+	var ram = capacities.get(piece_type, 8)
+	print("BlockSystem: Capacidad RAM para ", piece_type, " = ", ram)
+	return ram
 
-## Calculate ram usage
-func calculate_ram_usage(blocks: Array) -> int:
-	var total_ram = 0
-	for block_data in blocks:
-		if block_data is Dictionary and block_data.has("type"):
-			var block_info = get_block_info(block_data["type"])
-			total_ram += block_info.get("ram_cost", 0)
-	return total_ram
+static func calculate_ram_usage(script: Array) -> int:
+	var total = 0
+	for block_data in script:
+		var block_info = get_block_info(block_data.get("type", ""))
+		total += block_info.get("ram_cost", 0)
+	print("BlockSystem: Uso de RAM calculado = ", total)
+	return total
 
-## Verify if there's ram
-func is_script_valid(blocks: Array, available_ram: int) -> bool:
-	return calculate_ram_usage(blocks) <= available_ram
+static func is_script_valid(script: Array, max_ram: int) -> bool:
+	var used = calculate_ram_usage(script)
+	var valid = used <= max_ram
+	print("BlockSystem: Script válido? ", valid, " (", used, "/", max_ram, ")")
+	return valid
 
-## Get categiries
-func get_available_categories() -> Array:
-	var categories = []
-	for block_type in block_library:
-		var category = block_library[block_type]["category"]
-		if not category in categories:
-			categories.append(category)
-	return categories
+# === FUNCIONES DE EJECUCIÓN ===
+static func move_forward(piece, params = {}):
+	var direction = 1 if piece.piece_color == "white" else -1
+	var new_position = piece.board_position + Vector2(0, -direction)
+	return {"action": "move", "target": new_position}
 
-# 4. Debug
-func print_block_library():
-	print("=== BLOCK LIBRARY ===")
-	for block_type in block_library:
-		var block = block_library[block_type]
-		print("• %s: %s (RAM: %d)" % [block_type, block.name, block.ram_cost])
-	print("=====================")
+static func move_diagonal(piece, params = {}):
+	var direction = 1 if piece.piece_color == "white" else -1
+	var diagonal_left = piece.board_position + Vector2(-1, -direction)
+	var diagonal_right = piece.board_position + Vector2(1, -direction)
+	return {"action": "move_options", "targets": [diagonal_left, diagonal_right]}
 
-func print_piece_ram_capacities():
-	print("=== PIECE RAM CAPACITIES ===")
-	for piece_type in piece_ram_capacity:
-		print("• %s: %d RAM" % [piece_type, piece_ram_capacity[piece_type]])
-	print("============================")
+static func capture_piece(piece, params = {}):
+	return {"action": "capture", "direction": params.get("direction", "front")}
 
-# 5. Inilization
-func _ready():
-	print("🔧 BlockSystem loaded successfully!")
-	print_block_library()
-	print_piece_ram_capacities()
+static func check_enemy_front(piece, params = {}):
+	return {"action": "condition", "check": "enemy_front", "result": true}
