@@ -73,11 +73,10 @@ script = ExtResource("1_fdnlq")
 
 [node name="BackGround" type="Node2D" parent="."]
 
-[node name="Sprite2D" type="Sprite2D" parent="BackGround"]
+[node name="BackGround" type="Sprite2D" parent="BackGround"]
 material = SubResource("ShaderMaterial_fdnlq")
 texture = ExtResource("1_d1ilt")
 region_enabled = true
-region_rect = Rect2(2700, 1500, 2700, 1500)
 script = ExtResource("4_fdnlq")
 
 [node name="Turn" type="Node2D" parent="."]
@@ -85,7 +84,6 @@ material = SubResource("ShaderMaterial_344ge")
 
 [node name="TurnDisplay" type="Sprite2D" parent="Turn"]
 material = SubResource("ShaderMaterial_ynf5e")
-position = Vector2(-951, 6)
 texture = ExtResource("1_jjvhh")
 script = ExtResource("2_kry3j")
 
@@ -103,10 +101,10 @@ script = SubResource("GDScript_d1ilt")
 [node name="Camera2D" type="Camera2D" parent="Camera"]
 script = ExtResource("7_hptm8")
 
-[node name="CanvasLayer" type="CanvasLayer" parent="."]
-
 [node name="GameManager" type="Node" parent="."]
 script = ExtResource("3_8gbba")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
 
 [node name="Music" type="AudioStreamPlayer" parent="."]
 stream = ExtResource("6_21xkr")

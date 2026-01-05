@@ -50,12 +50,12 @@ static func get_blocks_by_category(category: String) -> Array:
 
 static func get_piece_ram_capacity(piece_type: String) -> int:
 	var capacities = {
-		"pawn": 8,      # Cambiado de 4 a 8
-		"bishop": 20,   # Cambiado de 6 a 20
-		"horse": 16,    # Cambiado de 5 a 16
-		"tower": 24,    # Cambiado de 6 a 24
-		"queen": 32,    # Cambiado de 8 a 32
-		"king": 12      # Cambiado de 10 a 12
+		"pawn": 8,
+		"bishop": 20,
+		"horse": 16,
+		"tower": 24,
+		"queen": 32,
+		"king": 12
 	}
 	var ram = capacities.get(piece_type, 8)
 	print("BlockSystem: Capacidad RAM para ", piece_type, " = ", ram)

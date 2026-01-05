@@ -14,16 +14,16 @@ class_name ProgrammingInterface
 @onready var ram_counter = $UI/MainContainer/RightPanel/RAMCounter
 @onready var control_buttons = $UI/MainContainer/LeftPanel/ControlButtons
 
-# Tamaños ULTRA COMPACTOS para 1360x768
-const BASE_SIZE = Vector2(450, 300)           # Muy compacto
-const BASE_BLOCK_SIZE = Vector2(130, 45)      # Muy compacto
-const BASE_FONT_SIZE = 11                     # Compacto
+# Tamaños AJUSTADOS para mejor visibilidad
+const BASE_SIZE = Vector2(600, 450)
+const BASE_BLOCK_SIZE = Vector2(160, 50)
+const BASE_FONT_SIZE = 14
 
-# workspace ultra compacto
-var workspace_original_size: Vector2 = Vector2(250, 70)
-var workspace_expansion_rate: int = 45
-var max_workspace_height: int = 350
-var min_workspace_height: int = 70
+# Workspace ajustado
+var workspace_original_size: Vector2 = Vector2(300, 100)
+var workspace_expansion_rate: int = 55
+var max_workspace_height: int = 500
+var min_workspace_height: int = 100
 
 var is_dragging_interface: bool = false
 var drag_interface_offset: Vector2 = Vector2.ZERO
@@ -53,6 +53,19 @@ func _ready():
 func setup_for_piece(piece: Node):
 	print("=== setup_for_piece INICIANDO ===")
 	print("Pieza: ", piece.piece_type)
+	
+	current_piece = piece
+	
+	# NUEVO: Intentar cargar desde GameManager primero
+	var gm = get_node_or_null("/root/Main/GameManager")
+	if gm and gm.has_method("get_piece_program"):
+		var saved_script = gm.get_piece_program(piece.piece_id)
+		if not saved_script.is_empty():
+			current_blocks = saved_script.duplicate(true)
+		else:
+			current_blocks = piece.behavior_script.duplicate(true)
+	else:
+		current_blocks = piece.behavior_script.duplicate(true)
 	
 	# **ESPERAR hasta estar en el árbol y visible**
 	var attempts = 0
@@ -136,26 +149,38 @@ func _delayed_initialize():
 	call_deferred("_initialize_interface")
 
 func _calculate_scale_factor() -> float:
-	# Calcular factor basado en la altura (768 es la base)
+	# Base de referencia: 768p
 	var base_height = 768.0
 	var current_height = float(current_resolution.y)
 	
-	# Escalar proporcionalmente, con límites
+	# El factor será 1.0 en 768p, ~1.4 en 1080p y ~2.8 en 4K
 	var factor = current_height / base_height
-	return clamp(factor, 0.7, 1.3)  # Entre 70% y 130%
+	
+	# Permitimos que crezca más para pantallas de alta resolución
+	return clamp(factor, 0.8, 3.0)
 
 func _apply_scaled_size():
-	# Calcular tamaño escalado
+	# 1. Resetear la escala física del nodo a 1.0 (MUY IMPORTANTE)
+	# Si el nodo tiene escala 0, sus hijos no se verán aunque midan 1000px
+	self.scale = Vector2.ONE
+	
+	# 2. Calcular el nuevo tamaño de la caja contenedora
 	var scaled_size = BASE_SIZE * scale_factor
 	
-	# Aplicar tamaño
+	# 3. Aplicar tamaños
 	custom_minimum_size = scaled_size
 	size = scaled_size
 	
-	print("Tamaño interface escalado:")
-	print("  Base: ", BASE_SIZE)
-	print("  Escala: ", scale_factor)
-	print("  Final: ", scaled_size)
+	# 4. Forzar al MarginContainer (UI) a ocupar todo el espacio
+	if has_node("UI"):
+		var ui_node = $UI
+		ui_node.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		# Añadir un pequeño margen interno para que no toque los bordes
+		var margin = int(10 * scale_factor)
+		ui_node.add_theme_constant_override("margin_left", margin)
+		ui_node.add_theme_constant_override("margin_top", margin)
+		ui_node.add_theme_constant_override("margin_right", margin)
+		ui_node.add_theme_constant_override("margin_bottom", margin)
 
 func _position_at_screen_right():
 	var viewport_size = get_viewport().get_visible_rect().size
@@ -617,8 +642,26 @@ func update_piece_info():
 		piece_status_label.text = status_info
 
 func update_ram_display():
-	if not current_piece or not ram_counter:
+	if not current_piece or not piece_info:
 		return
+	
+	var hbox = piece_info.get_node_or_null("HBoxContainer")
+	if not hbox: return
+	
+	var texture_rect = hbox.get_node_or_null("TextureRect")
+	
+	# --- CORRECCIÓN AQUÍ ---
+	if texture_rect:
+		if current_piece.get("texture"):
+			# Asignamos la textura pero nos aseguramos que no sea nula
+			texture_rect.texture = current_piece.texture
+		else:
+			# Si la pieza no tiene textura, podrías estar intentando 
+			# acceder a un nodo que no ha cargado. Usamos el sprite de la pieza:
+			var piece_sprite = current_piece.get_node_or_null("Sprite2D")
+			if piece_sprite:
+				texture_rect.texture = piece_sprite.texture
+	# -----------------------
 	
 	var used_ram = calculate_current_ram_usage()
 	var ram_used_label = ram_counter.get_node_or_null("RAMUsed")
@@ -755,33 +798,49 @@ func _on_test_button_pressed():
 		print("Test passed! RAM usage: ", used_ram, "/", available_ram)
 
 func _on_save_button_pressed():
-	print("Saving programming...")
-	
-	if not current_piece:
-		print("No piece selected for saving")
-		return
-	
-	# Verificar límite de RAM
-	var used_ram = calculate_current_ram_usage()
-	var available_ram = current_piece.available_ram
-	
-	if used_ram > available_ram:
-		print("Cannot save - RAM limit exceeded: ", used_ram, "/", available_ram)
-		return
-	
-	if current_piece.has_method("update_programming"):
-		current_piece.update_programming(current_blocks)
-		print("Programming saved for: ", current_piece.piece_type)
-		print("   - Blocks: ", current_blocks.size())
-		print("   - RAM used: ", used_ram, "/", available_ram)
+	if current_piece:
+		var final_blocks = []
 		
-		# Actualizar info
-		update_piece_info()
-		update_ram_display()
-	else:
-		print("Piece doesn't have update_programming method")
-	
-	_close_interface()
+		# Usamos la referencia que ya definiste en tus @onready al principio del script
+		# En tu caso es: workspace -> que apunta a $UI/MainContainer/CenterPanel/Workspace
+		var drop_zone = workspace.get_node_or_null("DropZone")
+		
+		if drop_zone:
+			# 1. Filtramos solo los nodos que son DraggableBlock
+			var children = []
+			for child in drop_zone.get_children():
+				if child is DraggableBlock:
+					children.append(child)
+			
+			# 2. Ordenamos por posición Y (ejecución de arriba hacia abajo)
+			children.sort_custom(func(a, b): return a.position.y < b.position.y)
+			
+			for block in children:
+				if not block.block_data.is_empty():
+					final_blocks.append(block.block_data)
+		
+		# 3. BUSCAR EL GAMEMANAGER (Esta es la solución al error de Identifier not declared)
+		var gm = get_node_or_null("/root/Main/GameManager")
+		
+		if gm:
+			# Guardamos el programa en el diccionario central del GM
+			gm.save_piece_program(current_piece, final_blocks)
+			
+			# OPCIONAL: Para el test del peón, si quieres que se mueva JUSTO al guardar
+			# puedes descomentar la siguiente línea:
+			# gm.execute_piece_program(current_piece)
+		else:
+			print("ERROR: No se pudo encontrar el GameManager en /root/Main/GameManager")
+		
+		# 4. Actualizar la pieza localmente
+		if current_piece.has_method("update_programming"):
+			current_piece.update_programming(final_blocks)
+		
+		print("--- GUARDADO EXITOSO ---")
+		print("Pieza ID: ", current_piece.get_instance_id())
+		print("Bloques: ", final_blocks) 
+		
+		_close_interface()
 
 func _on_cancel_button_pressed():
 	print("Cancelling programming...")

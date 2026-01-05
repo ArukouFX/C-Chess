@@ -1,41 +1,27 @@
 extends Sprite2D
 
-@onready var resolution_manager = get_node_or_null("/root/ResolutionManager")
-
 func _ready():
-	# Configurar para que cubra toda la pantalla
 	centered = false
+	# Es vital que 'Region Enabled' esté activado en el Inspector
+	region_enabled = true 
 	
-	if resolution_manager:
-		if resolution_manager.has_signal("resolution_changed"):
-			resolution_manager.resolution_changed.connect(_on_resolution_changed)
-		
-		# Aplicar escala inicial
-		apply_background_scale()
-	else:
-		# Sin ResolutionManager, estirar manualmente
-		var viewport_size = get_viewport_rect().size
-		self.scale = Vector2(
-			viewport_size.x / texture.get_width(),
-			viewport_size.y / texture.get_height()
-		)
-
-func _on_resolution_changed(new_size: Vector2, scale_factor: float):
-	apply_background_scale()
-
-func apply_background_scale():
-	if not resolution_manager:
-		return
+	var res_manager = get_node_or_null("/root/ResolutionManager")
+	if res_manager:
+		res_manager.resolution_changed.connect(_on_resolution_changed)
 	
+	apply_background_region()
+
+func _on_resolution_changed(_new_res: Vector2i):
+	apply_background_region()
+
+func apply_background_region():
 	var viewport_size = get_viewport_rect().size
 	
-	# Estirar background para cubrir toda la pantalla
-	self.scale = Vector2(
-		viewport_size.x / texture.get_width(),
-		viewport_size.y / texture.get_height()
-	)
+	# Ajustamos el rectángulo de la región al tamaño total de la pantalla
+	# Esto evita que la imagen se estire (scaling) y permite que se 'extienda'
+	region_rect = Rect2(Vector2.ZERO, viewport_size)
 	
-	# Posicionar en (0,0)
-	self.position = Vector2.ZERO
+	# Aseguramos que la posición sea el origen
+	global_position = Vector2.ZERO
 	
-	print("Background escalado a: ", self.scale)
+	print("Fondo: Región ajustada a ", viewport_size)

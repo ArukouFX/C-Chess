@@ -1,5 +1,10 @@
 extends Node
 
+# Diccionario que mapea el ID del bloque con su función de ejecución
+@onready var block_logic_map = {
+	"move_forward": _logic_move_forward
+}
+
 # References
 @onready var pieces_container = $"../Pieces"
 @onready var board = $"../Table/Board"
@@ -201,29 +206,30 @@ func capture_piece(piece_to_capture):
 	piece_to_capture.queue_free()
 
 func open_programming_interface_for_piece(piece: Node, mouse_pos: Vector2):
-	print("=== MÉTODO DIRECTO ===")
-	
-	# Instanciar
+	if current_programming_interface:
+		current_programming_interface.queue_free()
+
 	var new_interface = ProgrammingInterfaceScene.instantiate()
 	
-	# **AGREGAR COMO HIJO DIRECTO DE ESTE NODO (GameManager)**
-	# GameManager está en /root/Main/GameManager
-	add_child(new_interface)
+	# Importante: Ocultar ANTES de añadir al árbol para evitar el flash de error
+	new_interface.visible = false 
 	
-	# Configurar inmediatamente
-	new_interface.visible = true
+	var ui_layer = $"../CanvasLayer"
+	if ui_layer:
+		ui_layer.add_child(new_interface)
+	else:
+		add_child(new_interface)
 	
-	# NO esperar frames adicionales
-	# NO configurar z_index (dejar por defecto)
+	# Esperar a que el motor de renderizado reconozca el nodo
+	await get_tree().process_frame 
 	
-	# Setup inmediato
 	if new_interface.has_method("setup_for_piece"):
 		new_interface.setup_for_piece(piece)
 	
+	# Mostrar solo después de configurar
+	new_interface.visible = true
 	current_programming_interface = new_interface
-	
-	print("Interfaz creada directamente en GameManager")
-	print("Parent path: ", new_interface.get_path())
+	_position_interface_smartly(new_interface)
 
 func _position_interface_smartly(interface: Control):
 	var screen_size = get_viewport().get_visible_rect().size
@@ -598,16 +604,71 @@ func execute_programs_sequentially():
 	
 	execution_timer.start()
 
-func execute_piece_program(piece):
-	print("Ejecutando programa para: ", piece.piece_type)
-	piece.reset_execution()
-	var result = piece.execute_next_command()
+func execute_piece_program(piece: Node):
+	var pid = str(piece.get_instance_id())
+	var program = get_piece_program(pid)
 	
-	while result:
-		process_command_result(piece, result)
-		result = piece.execute_next_command()
+	for block in program:
+		var type = block.get("type", "")
+		if block_logic_map.has(type):
+			# Esto ejecuta la función _logic_move_forward pasando la pieza
+			block_logic_map[type].call(piece)
+			return # Termina tras el primer movimiento exitoso
+
+func _execute_action(piece: Node, type: String):
+	var forward = -1 if piece.piece_color == "white" else 1
+	var target = piece.board_position
 	
-	print("Programa completado para: ", piece.piece_type)
+	match type:
+		"move_forward": target += Vector2(0, forward)
+		"move_back":    target += Vector2(0, -forward)
+		"move_side":    target += Vector2(1, 0) # Derecha por defecto
+		"capture":      attempt_capture(piece, "front")
+		
+	if type != "capture" and is_valid_move(piece, target):
+		move_piece_to(piece, target)
+
+#execute loop
+func _execute_loop(piece: Node, action_block: Dictionary, repetitions: int):
+	print("Iniciando bucle de ", repetitions, " repeticiones")
+	for i in range(repetitions):
+		# Ejecutamos la acción. Si falla (ej. hay un obstáculo), el bucle se rompe
+		var type = action_block.get("type", "")
+		_execute_movement_block(piece, type)
+		
+		# Opcional: Podrías añadir un pequeño await aquí si quieres ver el paso a paso
+		# await get_tree().create_timer(0.1).timeout
+
+# Función para evaluar sensores
+func _check_condition(condition_type: String, piece: Node) -> bool:
+	var forward_dir = -1 if piece.piece_color == "white" else 1
+	var target_cell = piece.board_position + Vector2(0, forward_dir)
+	
+	var target_world_pos = _board_to_world_position(target_cell)
+	var obstacle = get_piece_at_position(target_world_pos)
+	
+	match condition_type:
+		"enemy_front":
+			return obstacle != null and obstacle.piece_color != piece.piece_color
+		"ally_front":
+			return obstacle != null and obstacle.piece_color == piece.piece_color
+		"detect_wall":
+			return target_cell.y < 0 or target_cell.y > 7
+	return false
+
+# Ejecutor de movimientos específicos
+func _execute_movement_block(piece: Node, move_type: String):
+	var forward = -1 if piece.piece_color == "white" else 1
+	var target = piece.board_position
+	
+	match move_type:
+		"move_forward": target += Vector2(0, forward)
+		"move_back":    target += Vector2(0, -forward)
+		"move_diagonal": target += Vector2(1, forward) # Ejemplo simple
+		"move_L":        target += Vector2(1, 2 * forward)
+	
+	if is_valid_move(piece, target):
+		move_piece_to(piece, target)
 
 func process_command_result(piece, command):
 	print("Procesando comando: ", command.get("action"))
@@ -854,8 +915,71 @@ func debug_block_system():
 		else:
 			print("✗ ", method, " missing")
 	
-	# Probar obtener un bloque
-	var test_block = BlockSystem.get_block_info("move_forward")
-	print("Test block 'move_forward': ", test_block)
+	var test_blocks = [
+	# --- MOVIMIENTOS SIMPLES ---
+	{"name": "Avanzar", "ram_cost": 2, "category": "movement", "type": "move_forward"},
+	{"name": "Retroceder", "ram_cost": 2, "category": "movement", "type": "move_back"},
+	{"name": "Paso Lateral", "ram_cost": 3, "category": "movement", "type": "move_side"},
+	
+	# --- ACCIONES ---
+	{"name": "Capturar", "ram_cost": 4, "category": "action", "type": "capture"},
+	
+	# --- LÓGICA / SENSORES ---
+	{"name": "Si Enemigo Al Frente", "ram_cost": 3, "category": "logic", "type": "if_enemy_front"},
+	{"name": "Si Casilla Libre", "ram_cost": 2, "category": "logic", "type": "if_cell_empty"}
+]
 	
 	print("=== END DEBUG ===")
+
+# Diccionario central para guardar el "software" de cada pieza
+# Clave: piece_id (String), Valor: Array de bloques (Data)
+var saved_programs: Dictionary = {}
+
+## Guarda el programa de una pieza en el almacén central
+func save_piece_program(piece_instance: Node, blocks_array: Array) -> void:
+	var piece_id = str(piece_instance.get_instance_id())
+	saved_programs[piece_id] = blocks_array.duplicate(true)
+	
+	# Marcamos la pieza como programada para que el GameManager la reconozca
+	if piece_instance.has_method("set_programmed"):
+		piece_instance.is_programmed = true 
+	
+	print("Programa guardado para pieza ID: ", piece_id)
+	
+	if piece_id == "":
+		print("Error GameManager: Intento de guardar programa con ID vacío")
+		return
+		
+	# Usamos duplicate(true) para crear una copia profunda. 
+	# Esto evita que cambios accidentales en la UI afecten al guardado.
+	saved_programs[piece_id] = blocks_array.duplicate(true)
+	
+	print("--- PROGRAMA GUARDADO EN GAMEMANAGER ---")
+	print("ID Pieza: ", piece_id)
+	print("Cantidad de bloques: ", saved_programs[piece_id].size())
+	print("---------------------------------------")
+
+## Recupera el programa guardado para una pieza específica
+func get_piece_program(piece_id: String) -> Array:
+	if saved_programs.has(piece_id):
+		# Devolvemos una copia para que la UI trabaje sobre ella sin alterar el original
+		return saved_programs[piece_id].duplicate(true)
+	
+	return [] # Retorna array vacío si no hay nada guardado
+
+# Funciones de logica de movimiento
+
+func _logic_move_forward(piece: Node):
+	var forward = -1 if piece.piece_color == "white" else 1
+	var target = piece.board_position + Vector2(0, forward)
+	if is_valid_move(piece, target):
+		move_piece_to(piece, target)
+
+func _logic_move_back(piece: Node):
+	var direction = 1 if piece.piece_color == "white" else -1
+	var target = piece.board_position + Vector2(0, direction)
+	if is_valid_move(piece, target):
+		move_piece_to(piece, target)
+
+func _logic_capture(piece: Node):
+	attempt_capture(piece, "front")
