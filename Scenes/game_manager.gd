@@ -2,7 +2,9 @@ extends Node
 
 # Diccionario que mapea el ID del bloque con su función de ejecución
 @onready var block_logic_map = {
-	"move_forward": _logic_move_forward
+	"move_forward": _logic_move_forward,
+	"move_back": _logic_move_back,
+	"capture": _logic_capture
 }
 
 # References
@@ -10,6 +12,9 @@ extends Node
 @onready var board = $"../Table/Board"
 @onready var turn_display = $"../Turn/TurnDisplay"
 @onready var camera = $"../Camera/Camera2D"
+
+# Diccionario global para guardar programas: { "ID_PIEZA": [lista_de_bloques] }
+var saved_programs = {}
 
 var current_programming_interface: Control = null
 var current_turn: String = "white"
@@ -83,30 +88,46 @@ func _reposition_all_pieces():
 			
 			print("  ", piece.piece_type, " movido a: ", new_world_pos)
 
-# Modificar spawn_piece para usar sistema centralizado:
+#modificado con sistema actual
 func spawn_piece(type: String, board_coord: Vector2):
 	var piece = PieceScene.instantiate()
 	var color = type.split("_")[0]
 	var piece_type = type.split("_")[1]
 	
+	var unique_id = "%s_%d_%d" % [type, int(board_coord.x), int(board_coord.y)]
+	piece.piece_id = unique_id
+	
 	piece.setup_piece(piece_textures[type], color, piece_type, board_coord)
 	
-	# Conectar señal
+	# Cargar programa si ya existe
+	if saved_programs.has(unique_id):
+		piece.behavior_script = saved_programs[unique_id].duplicate(true)
+		piece.is_programmed = true
+	
+	# 1. Configuración básica de la pieza
+	piece.setup_piece(piece_textures[type], color, piece_type, board_coord)
+	
+	# 2. INYECCIÓN DE DATOS (Opción B)
+	# Obtenemos el ID único que Godot le asignó a esta instancia en memoria
+	var pid = str(piece.get_instance_id())
+	
+	# Si el GameManager ya conoce un programa para este ID (o si usas un sistema de IDs por tipo)
+	if saved_programs.has(pid):
+		piece.behavior_script = saved_programs[pid].duplicate(true)
+		piece.is_programmed = true
+		print("Programa inyectado en ", piece_type, " desde el spawn.")
+	
+	# 3. Conexión de señales
 	if piece.has_signal("right_clicked"):
 		piece.right_clicked.connect(_on_piece_right_clicked)
 	
-	# Calcular posición mundial CORRECTAMENTE
+	# 4. Posicionamiento
 	var world_position = _board_to_world_position(board_coord)
 	piece.position = world_position
 	
-	# Debug
-	print("Pieza ", type, ":")
-	print("  Coord tablero: ", board_coord)
-	print("  Pos mundo: ", world_position)
-	print("  Board origin: ", board.get_board_origin() if board else "N/A")
-	print("  Cell size: ", board.cell_size if board else "N/A")
-	
+	# 5. Añadir al árbol (IMPORTANTE: Esto ocurre después de la inyección)
 	pieces_container.add_child(piece)
+	
 	return piece
 
 # Asegurar que _board_to_world_position use la función del board:
@@ -209,24 +230,33 @@ func open_programming_interface_for_piece(piece: Node, mouse_pos: Vector2):
 	if current_programming_interface:
 		current_programming_interface.queue_free()
 
+	# 1. Asegurar que la pieza tenga un ID único si no lo tiene
+	# Usamos su posición actual en el tablero para identificarla
+	if piece.piece_id == "":
+		var pos = piece.board_position
+		piece.piece_id = "%s_%d_%d" % [piece.piece_type, int(pos.x), int(pos.y)]
+
+	# 2. Instanciar la interfaz
 	var new_interface = ProgrammingInterfaceScene.instantiate()
-	
-	# Importante: Ocultar ANTES de añadir al árbol para evitar el flash de error
 	new_interface.visible = false 
 	
-	var ui_layer = $"../CanvasLayer"
+	# 3. Añadir al CanvasLayer (para que esté por encima de todo)
+	var ui_layer = get_node_or_null("/root/Main/CanvasLayer")
 	if ui_layer:
 		ui_layer.add_child(new_interface)
 	else:
 		add_child(new_interface)
 	
-	# Esperar a que el motor de renderizado reconozca el nodo
+	# 4. Esperar un frame y configurar
 	await get_tree().process_frame 
 	
 	if new_interface.has_method("setup_for_piece"):
 		new_interface.setup_for_piece(piece)
+		# Forzamos actualización de RAM nada más abrir
+		if new_interface.has_method("update_ram_display"):
+			new_interface.update_ram_display()
 	
-	# Mostrar solo después de configurar
+	# 5. Mostrar y posicionar
 	new_interface.visible = true
 	current_programming_interface = new_interface
 	_position_interface_smartly(new_interface)
@@ -604,16 +634,11 @@ func execute_programs_sequentially():
 	
 	execution_timer.start()
 
-func execute_piece_program(piece: Node):
-	var pid = str(piece.get_instance_id())
-	var program = get_piece_program(pid)
-	
-	for block in program:
-		var type = block.get("type", "")
-		if block_logic_map.has(type):
-			# Esto ejecuta la función _logic_move_forward pasando la pieza
-			block_logic_map[type].call(piece)
-			return # Termina tras el primer movimiento exitoso
+func _on_execute_turn_button_pressed():
+	# Solo iniciamos si no estamos ya ejecutando movimientos
+	if not execution_phase:
+		print("Iniciando ejecución de turno...")
+		start_execution_phase()
 
 func _execute_action(piece: Node, type: String):
 	var forward = -1 if piece.piece_color == "white" else 1
@@ -931,35 +956,24 @@ func debug_block_system():
 	
 	print("=== END DEBUG ===")
 
-# Diccionario central para guardar el "software" de cada pieza
-# Clave: piece_id (String), Valor: Array de bloques (Data)
-var saved_programs: Dictionary = {}
-
-## Guarda el programa de una pieza en el almacén central
-func save_piece_program(piece_instance: Node, blocks_array: Array) -> void:
-	var piece_id = str(piece_instance.get_instance_id())
-	saved_programs[piece_id] = blocks_array.duplicate(true)
-	
-	# Marcamos la pieza como programada para que el GameManager la reconozca
-	if piece_instance.has_method("set_programmed"):
-		piece_instance.is_programmed = true 
-	
-	print("Programa guardado para pieza ID: ", piece_id)
-	
-	if piece_id == "":
-		print("Error GameManager: Intento de guardar programa con ID vacío")
+func save_piece_program(piece: Node, blocks_array: Array) -> void:
+	if not piece or not is_instance_valid(piece):
+		print("Error GameManager: Pieza inválida al guardar")
 		return
-		
-	# Usamos duplicate(true) para crear una copia profunda. 
-	# Esto evita que cambios accidentales en la UI afecten al guardado.
+
+	var piece_id = piece.piece_id
+	
+	# Usamos duplicate(true) para evitar problemas de referencia con la UI
 	saved_programs[piece_id] = blocks_array.duplicate(true)
+	
+	# Marcar la pieza para que sea incluida en la ejecución
+	piece.is_programmed = true 
 	
 	print("--- PROGRAMA GUARDADO EN GAMEMANAGER ---")
-	print("ID Pieza: ", piece_id)
-	print("Cantidad de bloques: ", saved_programs[piece_id].size())
-	print("---------------------------------------")
+	print("Pieza: ", piece.piece_type, " (ID: ", piece_id, ")")
+	print("Bloques: ", saved_programs[piece_id].size())
 
-## Recupera el programa guardado para una pieza específica
+# Recupera el programa guardado para una pieza específica
 func get_piece_program(piece_id: String) -> Array:
 	if saved_programs.has(piece_id):
 		# Devolvemos una copia para que la UI trabaje sobre ella sin alterar el original
@@ -972,8 +986,11 @@ func get_piece_program(piece_id: String) -> Array:
 func _logic_move_forward(piece: Node):
 	var forward = -1 if piece.piece_color == "white" else 1
 	var target = piece.board_position + Vector2(0, forward)
+	
 	if is_valid_move(piece, target):
-		move_piece_to(piece, target)
+		move_piece_to(piece, target) # Esta función ya tiene el Tween para la animación
+	else:
+		print("Movimiento adelante bloqueado para ", piece.piece_id)
 
 func _logic_move_back(piece: Node):
 	var direction = 1 if piece.piece_color == "white" else -1
@@ -983,3 +1000,57 @@ func _logic_move_back(piece: Node):
 
 func _logic_capture(piece: Node):
 	attempt_capture(piece, "front")
+
+#Cambio de turno
+
+# Esta función coordina a TODAS las piezas
+func execute_turn_and_switch():
+	if execution_phase: return
+	
+	# 1. Buscamos piezas únicas programadas
+	var pieces_to_run = []
+	var processed_ids = {} # Para evitar duplicados en el array
+	
+	for piece in pieces_container.get_children():
+		var pid = piece.get_instance_id()
+		if piece.piece_color == current_turn and piece.is_programmed and not processed_ids.has(pid):
+			pieces_to_run.append(piece)
+			processed_ids[pid] = true
+	
+	if pieces_to_run.is_empty():
+		return
+	
+	execution_phase = true 
+	print("--- INICIANDO EJECUCIÓN DE TURNO ---")
+
+	for piece in pieces_to_run:
+		# IMPORTANTE: Desmarcamos la pieza ANTES de ejecutar para evitar re-entradas
+		piece.is_programmed = false 
+		
+		await execute_piece_program(piece)
+		await get_tree().create_timer(0.2).timeout
+
+	execution_phase = false
+	print("--- TURNO FINALIZADO ---")
+	
+	# 2. LIMPIEZA TOTAL: Por seguridad, limpiamos cualquier flag restante
+	for piece in pieces_container.get_children():
+		if piece.piece_color == current_turn:
+			piece.is_programmed = false
+
+	end_turn()
+
+func execute_piece_program(piece: Node):
+	var pid = piece.piece_id
+	if saved_programs.has(pid):
+		var blocks = saved_programs[pid]
+		print("Ejecutando ", blocks.size(), " bloques para ", piece.piece_type)
+		
+		for block_data in blocks:
+			var type = block_data.get("type", "")
+			if block_logic_map.has(type):
+				print(" -> Ejecutando bloque: ", type)
+				# Ejecutamos la función guardada en el diccionario
+				block_logic_map[type].call(piece)
+			else:
+				print(" -> ERROR: No hay lógica definida para ", type)

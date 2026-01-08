@@ -14,17 +14,17 @@ class_name ProgrammingInterface
 @onready var ram_counter = $UI/MainContainer/RightPanel/RAMCounter
 @onready var control_buttons = $UI/MainContainer/LeftPanel/ControlButtons
 
-# Tamaños AJUSTADOS para mejor visibilidad
+# Tamaños y Constantes
 const BASE_SIZE = Vector2(600, 450)
 const BASE_BLOCK_SIZE = Vector2(160, 50)
 const BASE_FONT_SIZE = 14
-
-# Workspace ajustado
-var workspace_original_size: Vector2 = Vector2(300, 100)
-var workspace_expansion_rate: int = 55
-var max_workspace_height: int = 500
 var min_workspace_height: int = 100
 
+# Variables para el redimensionamiento del Workspace
+var workspace_original_size: Vector2 = Vector2.ZERO
+var max_workspace_height: int = 500
+
+# Variables para arrastrar la ventana completa
 var is_dragging_interface: bool = false
 var drag_interface_offset: Vector2 = Vector2.ZERO
 
@@ -33,7 +33,6 @@ var current_piece: Node = null
 var current_blocks: Array = []
 var currently_dragging_block: DraggableBlock = null
 var drop_zones: Array[Control] = []
-
 var DraggableBlockScene = preload("res://Scenes/draggable_block.tscn")
 
 # Para escalado
@@ -41,51 +40,224 @@ var scale_factor: float = 1.0
 var current_resolution: Vector2i = Vector2i(1360, 768)
 
 func _ready():
-	print("=== PROGRAMMING INTERFACE _ready() ===")
+	# Buscamos el contador de RAM relativo a este nodo exacto
+	ram_counter = find_child("RAMCounter", true, false)
 	
-	# **NO hacer nada aquí** - dejar que setup_for_piece haga todo
-	# Solo ocultar inicialmente
 	visible = false
-	
-	# Posponer TODO para setup_for_piece
-	print("Listo para ser configurado por setup_for_piece")
+	print("=== PROGRAMMING INTERFACE _ready() ===")
 
 func setup_for_piece(piece: Node):
 	print("=== setup_for_piece INICIANDO ===")
-	print("Pieza: ", piece.piece_type)
-	
 	current_piece = piece
 	
-	# NUEVO: Intentar cargar desde GameManager primero
+	# 1. Recuperar del GameManager ANTES de mostrar nada
 	var gm = get_node_or_null("/root/Main/GameManager")
 	if gm and gm.has_method("get_piece_program"):
-		var saved_script = gm.get_piece_program(piece.piece_id)
-		if not saved_script.is_empty():
-			current_blocks = saved_script.duplicate(true)
-		else:
-			current_blocks = piece.behavior_script.duplicate(true)
-	else:
-		current_blocks = piece.behavior_script.duplicate(true)
-	
-	# **ESPERAR hasta estar en el árbol y visible**
+		var saved = gm.get_piece_program(piece.piece_id)
+		current_blocks = saved.duplicate(true)
+		print("Data cargada desde GM: ", current_blocks.size())
+
+	# 2. Esperar a que la interfaz esté lista en el árbol
+	visible = true # Activamos visibilidad para que Godot la procese
 	var attempts = 0
-	while attempts < 10 and (not is_inside_tree() or not visible):
-		print("Esperando... ({attempts}/10) - En árbol: {is_inside_tree()}, Visible: {visible}")
+	while attempts < 10 and not is_inside_tree():
 		await get_tree().process_frame
 		attempts += 1
 	
-	if attempts >= 10:
-		print("ADVERTENCIA: Timeout esperando a que la interfaz esté lista")
+	# 3. Disparar construcción de la interfaz
+	_initialize_interface_logic()
+
+func _initialize_interface_logic():
+	# 1. Configuración física
+	current_resolution = Vector2i(get_viewport().get_visible_rect().size)
+	scale_factor = _calculate_scale_factor()
+	_apply_scaled_size()
+	_position_at_screen_right()
 	
-	print("Interfaz lista, configurando...")
+	# 2. Vincular el DropZone y configurar señales reactivas
+	var dz = find_child("DropZone", true, false)
+	if dz:
+		workspace = dz
+		# Usamos child_order_changed porque detecta entradas, salidas y reordenamientos
+		if not dz.child_order_changed.is_connected(update_ram_display):
+			dz.child_order_changed.connect(update_ram_display)
+		
+		# Opcional: child_entered_tree por si acaso el reordenamiento no basta
+		if not dz.child_entered_tree.is_connected(_on_workspace_changed):
+			dz.child_entered_tree.connect(_on_workspace_changed)
+			
+		print("Sistema reactivo de RAM conectado al DropZone")
 	
-	current_piece = piece
-	current_blocks = piece.behavior_script.duplicate() if piece.behavior_script else []
+	# 3. Asegurar referencia al contador de RAM
+	if not ram_counter:
+		ram_counter = find_child("RAMCounter", true, false)
 	
-	# **AHORA SÍ configurar**
-	_initialize_interface_components()
+	# 4. Conexiones y carga de datos
+	_connect_buttons()
+	update_piece_info()
+	load_block_palette()
 	
-	print("=== setup_for_piece COMPLETADO ===")
+	# 5. CARGA CRÍTICA
+	load_workspace_blocks() 
+	
+	_rescale_internal_elements()
+	
+	# Actualización inicial forzada
+	update_ram_display()
+	visible = true
+
+func load_workspace_blocks():
+	# Si no tenemos el DropZone vinculado, lo buscamos ahora
+	if not workspace:
+		workspace = find_child("DropZone", true, false)
+	
+	if not workspace: 
+		print("ERROR CRÍTICO: No hay zona de soltado para contar RAM")
+		return
+	
+	# Limpiar hijos actuales
+	for child in workspace.get_children():
+		if child is DraggableBlock:
+			child.queue_free()
+	
+	print("Instanciando bloques en UI: ", current_blocks.size())
+	for data in current_blocks:
+		var block_instance = DraggableBlockScene.instantiate()
+		workspace.add_child(block_instance)
+		
+		# Setup visual
+		block_instance.custom_minimum_size = BASE_BLOCK_SIZE * scale_factor
+		block_instance.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		
+		# Recuperar info completa del sistema de bloques
+		var full_info = BlockSystem.get_block_info(data["type"])
+		block_instance.setup_block(full_info)
+		block_instance.block_id = data["type"]
+		
+		# Conectar para poder moverlos de nuevo
+		block_instance.block_dragged.connect(_on_block_dragged)
+		block_instance.block_dropped.connect(_on_block_dropped)
+	
+	# Forzar actualización de RAM tras cargar
+	update_ram_display()
+
+func update_ram_display():
+	if not current_piece: return
+	
+	var used_ram = 0
+	var found_blocks = 0
+	
+	# 1. Contar bloques en el DropZone
+	var dz = find_child("DropZone", true, false)
+	if dz:
+		for child in dz.get_children():
+			if child is DraggableBlock and not child.is_queued_for_deletion():
+				found_blocks += 1
+				var info = BlockSystem.get_block_info(child.block_id)
+				used_ram += info.get("ram_cost", 0)
+
+	# 2. ACTUALIZACIÓN VISUAL FORZADA
+	if ram_counter:
+		# Buscamos los labels específicamente por nombre
+		var used_label = ram_counter.find_child("RAMUsed", true, false)
+		var total_label = ram_counter.find_child("RAMTotal", true, false)
+		
+		if used_label:
+			used_label.text = str(used_ram)
+			# Forzamos a que el Label se actualice visualmente de inmediato
+			used_label.queue_redraw() 
+			print("UI UPDATED: RAMUsed text is now ", used_label.text)
+			# Cambiar a rojo si se pasa
+			if used_ram > current_piece.available_ram:
+				used_label.add_theme_color_override("font_color", Color.RED)
+			else:
+				used_label.add_theme_color_override("font_color", Color.WHITE)
+				
+		if total_label:
+			total_label.text = str(current_piece.available_ram)
+
+	print("SINCRO RAM -> Bloques: ", found_blocks, " RAM: ", used_ram, "/", current_piece.available_ram)
+
+func calculate_current_ram_usage() -> int:
+	var total = 0
+	# Calculamos basándonos en la lista actual de datos
+	for block_data in current_blocks:
+		if block_data.has("type"):
+			var info = BlockSystem.get_block_info(block_data["type"])
+			total += info.get("ram_cost", 0)
+	return total
+
+func update_blocks_from_workspace():
+	current_blocks.clear()
+	if workspace:
+		for child in workspace.get_children():
+			if child is DraggableBlock:
+				# Intentamos obtener el ID de varias formas para estar seguros
+				var id = ""
+				if child.block_id != "": id = child.block_id
+				elif child.block_data and child.block_data.has("type"): id = child.block_data["type"]
+				
+				if id != "":
+					current_blocks.append({"type": id})
+					# Sincronizamos de vuelta al nodo por si acaso
+					child.block_id = id 
+	
+	# Esto actualiza el RAMCounter visualmente
+	update_ram_display()
+
+# --- FUNCIONES DE SOPORTE REUTILIZADAS ---
+
+func _calculate_scale_factor() -> float:
+	return clamp(float(current_resolution.y) / 768.0, 0.8, 3.0)
+
+func _apply_scaled_size():
+	self.scale = Vector2.ONE
+	var scaled_size = BASE_SIZE * scale_factor
+	custom_minimum_size = scaled_size
+	size = scaled_size
+
+func _position_at_screen_right():
+	var viewport_size = get_viewport().get_visible_rect().size
+	position = Vector2(viewport_size.x - size.x - 20, (viewport_size.y - size.y) / 2)
+
+func _connect_buttons():
+	# Usamos un patrón seguro para evitar múltiples conexiones
+	var buttons = {
+		"TestButton": _on_test_button_pressed,
+		"SaveButton": _on_save_button_pressed,
+		"CancelButton": _on_cancel_button_pressed
+	}
+	for b_name in buttons:
+		var btn = control_buttons.find_child(b_name, true, false)
+		if btn and not btn.pressed.is_connected(buttons[b_name]):
+			btn.pressed.connect(buttons[b_name])
+
+# --- EVENTOS DE ARRASTRE ---
+
+func _on_block_dropped(block: DraggableBlock, global_pos: Vector2):
+	var target_drop_zone = _get_drop_zone_at_position(global_pos)
+	
+	if target_drop_zone:
+		_move_block_to_target(block, target_drop_zone, global_pos)
+		print("Bloque soltado en Workspace físicamente")
+	else:
+		_return_block_to_palette(block)
+	
+	# Esto es lo más importante: 
+	# Forzamos la actualización de la RAM un frame después 
+	# para que el VBoxContainer ya tenga al niño en su lista.
+	get_tree().process_frame.connect(update_ram_display, CONNECT_ONE_SHOT)
+
+func _move_block_to_target(block: DraggableBlock, target: Control, _pos: Vector2):
+	if block.get_parent(): 
+		block.get_parent().remove_child(block)
+	
+	# 'target' debe ser el DropZone
+	target.add_child(block)
+	
+	# Forzamos que se vea bien en el VBoxContainer
+	block.custom_minimum_size = BASE_BLOCK_SIZE * scale_factor
+	block.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 func _initialize_interface_components():
 	print("Inicializando componentes de interfaz...")
@@ -148,51 +320,6 @@ func _delayed_initialize():
 	# Inicializar interfaz interna
 	call_deferred("_initialize_interface")
 
-func _calculate_scale_factor() -> float:
-	# Base de referencia: 768p
-	var base_height = 768.0
-	var current_height = float(current_resolution.y)
-	
-	# El factor será 1.0 en 768p, ~1.4 en 1080p y ~2.8 en 4K
-	var factor = current_height / base_height
-	
-	# Permitimos que crezca más para pantallas de alta resolución
-	return clamp(factor, 0.8, 3.0)
-
-func _apply_scaled_size():
-	# 1. Resetear la escala física del nodo a 1.0 (MUY IMPORTANTE)
-	# Si el nodo tiene escala 0, sus hijos no se verán aunque midan 1000px
-	self.scale = Vector2.ONE
-	
-	# 2. Calcular el nuevo tamaño de la caja contenedora
-	var scaled_size = BASE_SIZE * scale_factor
-	
-	# 3. Aplicar tamaños
-	custom_minimum_size = scaled_size
-	size = scaled_size
-	
-	# 4. Forzar al MarginContainer (UI) a ocupar todo el espacio
-	if has_node("UI"):
-		var ui_node = $UI
-		ui_node.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		# Añadir un pequeño margen interno para que no toque los bordes
-		var margin = int(10 * scale_factor)
-		ui_node.add_theme_constant_override("margin_left", margin)
-		ui_node.add_theme_constant_override("margin_top", margin)
-		ui_node.add_theme_constant_override("margin_right", margin)
-		ui_node.add_theme_constant_override("margin_bottom", margin)
-
-func _position_at_screen_right():
-	var viewport_size = get_viewport().get_visible_rect().size
-	var margin = 20 * scale_factor
-	
-	position = Vector2(
-		viewport_size.x - size.x - margin,
-		(viewport_size.y - size.y) / 2
-	)
-	
-	print("Interface posicionada en: ", position)
-
 # Conectar a cambios de resolución
 func connect_to_resolution_changes():
 	var main = get_node_or_null("/root/Main")
@@ -253,18 +380,21 @@ func _scale_panels():
 		right_panel.custom_minimum_size.x = 120 * scale_factor  # Reducido de 150
 	
 	if workspace:
-		var base_workspace_height = min_workspace_height * scale_factor
-		workspace.custom_minimum_size.y = base_workspace_height
-		workspace.size.y = base_workspace_height
+		# Buscamos el ScrollContainer (padre del DropZone)
+		var scroll = workspace.get_parent() if workspace.get_parent() is ScrollContainer else null
 		
-		# Ancho también reducido
-		workspace.custom_minimum_size.x = 80 * scale_factor  # Reducido
-		workspace.size.x = 80 * scale_factor
+		# Aumentamos el tamaño para que sea una zona de soltado cómoda
+		var target_width = 250 * scale_factor
+		var target_height = 400 * scale_factor
 		
-		# Actualizar dropzone si existe
-		var drop_zone = workspace.get_node_or_null("DropZone")
-		if drop_zone:
-			drop_zone.size = workspace.size
+		if scroll:
+			scroll.custom_minimum_size = Vector2(target_width, target_height)
+			scroll.size = Vector2(target_width, target_height)
+		
+		# El DropZone (VBoxContainer) debe llenar el ancho pero ser flexible en alto
+		workspace.custom_minimum_size.x = (target_width - 20) 
+		workspace.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# IMPORTANTE: NO fijes custom_minimum_size.y aquí para que el scroll funcione
 	
 	# Espaciado en contenedores reducido
 	if main_container is HBoxContainer:
@@ -288,17 +418,17 @@ func _scale_existing_blocks():
 				child.size = child.custom_minimum_size
 
 func _initialize_interface():
-	_verify_ui_structure()
-	_setup_panel_sizes()
-	_connect_buttons()
-	_setup_drop_zones()
-	
-	if workspace:
-		workspace_original_size = workspace.size
-		print("Workspace original size: ", workspace_original_size)
-
-# El resto del código se mantiene igual hasta load_block_palette...
-
+	# Buscamos el VBoxContainer donde realmente caen los bloques
+	var dz = find_child("DropZone", true, false)
+	if dz:
+		workspace = dz  # <-- Ahora 'workspace' es el VBoxContainer
+		drop_zones = [dz]
+		print("Sincronización: Workspace vinculado a ", dz.get_path())
+	else:
+		# Si no existe DropZone, usamos el panel central pero avisamos
+		workspace = $UI/MainContainer/CenterPanel/Workspace
+		drop_zones = [workspace]
+		print("ALERTA: Usando Workspace por defecto, no se halló DropZone")
 func load_block_palette():
 	print("=== CARGANDO PALETA DE BLOQUES ===")
 	
@@ -350,115 +480,31 @@ func load_block_palette():
 	
 	# Cargar cada bloque con tamaño escalado
 	for block_data in test_blocks:
-		var block_scene = preload("res://Scenes/draggable_block.tscn")
-		if not block_scene:
-			print("ERROR: No se puede cargar draggable_block.tscn")
-			continue
-		
-		var block_instance = block_scene.instantiate()
+		var block_instance = DraggableBlockScene.instantiate()
 		container.add_child(block_instance)
 		
+		# 1. Asignar ID primero
+		block_instance.block_id = block_data["type"]
+		block_instance.setup_block(block_data)
+		
+		# 2. Configurar visualmente
 		if block_instance.has_method("setup_block"):
 			block_instance.setup_block(block_data)
-			
-			# Tamaño escalado
 			var scaled_block_size = BASE_BLOCK_SIZE * scale_factor
 			block_instance.custom_minimum_size = scaled_block_size
 			block_instance.size = scaled_block_size
+		
+		# 3. Conectar señales (UNA SOLA VEZ)
+		if not block_instance.block_dragged.is_connected(_on_block_dragged):
+			block_instance.block_dragged.connect(_on_block_dragged)
+		
+		if not block_instance.block_dropped.is_connected(_on_block_dropped):
+			block_instance.block_dropped.connect(_on_block_dropped)
 			
-			# Conectar señales
-			if block_instance.has_signal("block_dragged"):
-				block_instance.block_dragged.connect(_on_block_dragged)
-			
-			if block_instance.has_signal("block_dropped"):
-				block_instance.block_dropped.connect(_on_block_dropped)
-			
-			# Asegurar que el bloque pueda recibir input
-			block_instance.mouse_filter = Control.MOUSE_FILTER_STOP
-		else:
-			print("ERROR: bloque no tiene setup_block")
+		block_instance.mouse_filter = Control.MOUSE_FILTER_STOP
 	
 	print("Paleta cargada: ", container.get_child_count(), " bloques")
 	print("=== FIN CARGA PALETA ===")
-
-# En _move_block_to_target, actualizar el espaciado:
-func _move_block_to_target(block: DraggableBlock, target: Control, global_pos: Vector2):
-	print("Moving block to: ", target.name)
-	
-	# Guardar referencia al padre original
-	var original_parent = block.get_parent()
-	
-	# Si es el workspace, organizar en columna con espaciado reducido
-	if target.name == "DropZone" or "DropZone" in target.name:
-		# Organizar en columna con espaciado escalado REDUCIDO
-		var blocks_in_workspace = target.get_children().filter(func(child): return child is DraggableBlock)
-		var block_spacing = 55 * scale_factor  # Reducido de 70
-		var y_position = 15 * scale_factor + (blocks_in_workspace.size() - 1) * block_spacing  # Margen reducido
-		var x_position = 15 * scale_factor  # Margen reducido
-		block.position = Vector2(x_position, y_position)
-	
-	# Remover del padre actual
-	if original_parent:
-		original_parent.remove_child(block)
-	
-	# Agregar al nuevo destino
-	target.add_child(block)
-	
-	# Si es el workspace, organizar en columna con espaciado escalado
-	if target.name == "DropZone" or "DropZone" in target.name:
-		# Organizar en columna con espaciado escalado
-		var blocks_in_workspace = target.get_children().filter(func(child): return child is DraggableBlock)
-		var block_spacing = 70 * scale_factor  # Espaciado escalado
-		var y_position = 20 * scale_factor + (blocks_in_workspace.size() - 1) * block_spacing
-		block.position = Vector2(20 * scale_factor, y_position)
-		
-		# Agregar a current_blocks si no está
-		if not current_blocks.has(block.block_data):
-			current_blocks.append(block.block_data)
-			update_ram_display()
-			print("Block added to current_blocks")
-	else:
-		# Para otros destinos, usar posición relativa
-		var local_pos = global_pos - target.global_position
-		block.position = local_pos
-	
-	# Asegurar que el bloque sea visible
-	block.visible = true
-	block.modulate = Color.WHITE
-	
-	print("Block successfully moved")
-	
-	# Reorganizar workspace si es necesario
-	if target.name == "DropZone" or "DropZone" in target.name:
-		_reposition_all_workspace_blocks()
-
-func _reposition_all_workspace_blocks():
-	var drop_zone = workspace.get_node_or_null("DropZone")
-	if not drop_zone:
-		print("No drop zone for repositioning")
-		return
-	
-	var blocks = []
-	var start_y = 8 * scale_factor  # Reducido
-	var block_spacing = 55 * scale_factor  # Reducido de 70
-	var x_position = 15 * scale_factor  # Reducido
-	
-	for child in drop_zone.get_children():
-		if child is DraggableBlock:
-			blocks.append(child)
-	
-	print("Repositioning ", blocks.size(), " blocks")
-	
-	# Ordenar por posición Y actual
-	blocks.sort_custom(func(a, b): return a.position.y < b.position.y)
-	
-	# Reposicionar todos los bloques
-	for i in range(blocks.size()):
-		blocks[i].position = Vector2(x_position, start_y + i * block_spacing)
-	
-	print("Blocks repositioned")
-	
-	_expand_workspace_if_needed()
 
 func _expand_workspace_if_needed():
 	if not workspace:
@@ -483,14 +529,19 @@ func _expand_workspace_if_needed():
 		print("Workspace auto-resized to: ", new_height, " (blocks: ", _get_workspace_block_count(), ")")
 
 func _setup_drop_zones():
+	# Limpiamos la lista para no acumular zonas fantasma
 	drop_zones.clear()
-	var workspace_drop = workspace.get_node_or_null("DropZone")
-	if workspace_drop:
-		drop_zones.append(workspace_drop)
-		print("Drop zones configured")
-	else:
-		print("No drop zone found, creating one...")
-		_create_drop_zone()
+	
+	# Usamos el workspace que encontramos en _initialize_interface
+	if workspace:
+		workspace.mouse_filter = Control.MOUSE_FILTER_PASS
+		# Agregamos el workspace real a la lista de colisiones
+		drop_zones.append(workspace)
+		print("DropZone manual añadido a la lista de detección.")
+
+# Borra el contenido de esta función o coméntala, ya no la necesitamos
+func _create_drop_zone() -> Control:
+	return workspace
 
 func _verify_ui_structure():
 	var nodes = {
@@ -527,76 +578,12 @@ func _setup_panel_sizes():
 		workspace.size = Vector2(100, min_workspace_height)
 		print("Workspace configured: ", workspace.size)
 
-func _connect_buttons():
-	var test_button = control_buttons.get_node_or_null("TestButton")
-	var save_button = control_buttons.get_node_or_null("SaveButton")
-	var cancel_button = control_buttons.get_node_or_null("CancelButton")
-	
-	if test_button:
-		test_button.pressed.connect(_on_test_button_pressed)
-		print("TestButton connected")
-	if save_button:
-		save_button.pressed.connect(_on_save_button_pressed)
-		print("SaveButton connected")  
-	if cancel_button:
-		cancel_button.pressed.connect(_on_cancel_button_pressed)
-		print("CancelButton connected")
-
 func _update_scroll_container(scroll_container: ScrollContainer):
 	# Solo forzar redibujado, no configurar propiedades problemáticas
 	scroll_container.queue_redraw()
 	if scroll_container.has_node("GridContainer"):
 		var container = scroll_container.get_node("GridContainer")
 		container.queue_redraw()
-
-func load_workspace_blocks():
-	var workspace_area = workspace.get_node_or_null("DropZone")
-	if not workspace_area:
-		print("No workspace area found, creating...")
-		workspace_area = _create_drop_zone()
-	
-	# Limpiar workspace
-	for child in workspace_area.get_children():
-		if child is DraggableBlock:
-			child.queue_free()
-	
-	# Cargar bloques guardados
-	if current_piece and not current_piece.behavior_script.is_empty():
-		print("Loading ", current_piece.behavior_script.size(), " saved blocks for piece")
-		for block_data in current_piece.behavior_script:
-			var block_instance = DraggableBlockScene.instantiate()
-			workspace_area.add_child(block_instance)
-			block_instance.setup_block(block_data)
-			block_instance.mouse_filter = Control.MOUSE_FILTER_STOP
-			
-			# Conectar señales
-			if block_instance.has_signal("block_dragged"):
-				block_instance.block_dragged.connect(_on_block_dragged)
-			
-			if block_instance.has_signal("block_dropped"):
-				block_instance.block_dropped.connect(_on_block_dropped)
-		
-		_reposition_all_workspace_blocks()
-	
-	print("Workspace ready - DropZone child count: ", workspace_area.get_child_count())
-
-func _create_drop_zone() -> Control:
-	var drop_zone = ColorRect.new()
-	drop_zone.name = "DropZone"
-	drop_zone.z_index = 10
-	drop_zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	drop_zone.color = Color(0.8, 0.2, 0.2, 0.3)
-	
-	if workspace:
-		drop_zone.size = workspace.size
-		drop_zone.custom_minimum_size = workspace.size
-		workspace.add_child(drop_zone)
-		print("DropZone created with size: ", drop_zone.size)
-	
-	# Agregar a drop_zones
-	drop_zones.append(drop_zone)
-	
-	return drop_zone
 
 func update_piece_info():
 	if not current_piece or not piece_info:
@@ -641,106 +628,32 @@ func update_piece_info():
 	if piece_status_label:
 		piece_status_label.text = status_info
 
-func update_ram_display():
-	if not current_piece or not piece_info:
-		return
-	
-	var hbox = piece_info.get_node_or_null("HBoxContainer")
-	if not hbox: return
-	
-	var texture_rect = hbox.get_node_or_null("TextureRect")
-	
-	# --- CORRECCIÓN AQUÍ ---
-	if texture_rect:
-		if current_piece.get("texture"):
-			# Asignamos la textura pero nos aseguramos que no sea nula
-			texture_rect.texture = current_piece.texture
-		else:
-			# Si la pieza no tiene textura, podrías estar intentando 
-			# acceder a un nodo que no ha cargado. Usamos el sprite de la pieza:
-			var piece_sprite = current_piece.get_node_or_null("Sprite2D")
-			if piece_sprite:
-				texture_rect.texture = piece_sprite.texture
-	# -----------------------
-	
-	var used_ram = calculate_current_ram_usage()
-	var ram_used_label = ram_counter.get_node_or_null("RAMUsed")
-	var ram_total_label = ram_counter.get_node_or_null("RAMTotal")
-	
-	if ram_used_label:
-		ram_used_label.text = str(used_ram)
-	if ram_total_label:
-		ram_total_label.text = str(current_piece.available_ram)
-	
-	print("RAM Display Updated: ", used_ram, "/", current_piece.available_ram)
-
-func calculate_current_ram_usage() -> int:
-	var total = 0
-	for block_data in current_blocks:
-		if block_data is Dictionary and block_data.has("ram_cost"):
-			total += block_data["ram_cost"]
-		elif block_data is Dictionary and block_data.has("type"):
-			if BlockSystem:
-				var block_info = BlockSystem.get_block_info(block_data["type"])
-				total += block_info.get("ram_cost", 0)
-	print("Calculated RAM usage: ", total)
-	return total
-
 func _on_block_dragged(block: DraggableBlock, global_pos: Vector2):
 	print("BLOCK DRAGGED: ", block.block_data["name"])
 	currently_dragging_block = block
 	_highlight_drop_zones(true)
 
-func _on_block_dropped(block: DraggableBlock, global_pos: Vector2):
-	print("BLOCK DROPPED: ", block.block_data["name"])
-	currently_dragging_block = null
-	
-	# Buscar el dropzone más cercano
-	var target_drop_zone = _get_drop_zone_at_position(global_pos)
-	
-	if target_drop_zone:
-		print("Dropped on drop zone: ", target_drop_zone.name)
-		_move_block_to_target(block, target_drop_zone, global_pos)
-	else:
-		print("No valid drop zone found, returning to palette")
-		_return_block_to_palette(block)
-	
-	_highlight_drop_zones(false)
-
 func _get_drop_zone_at_position(global_pos: Vector2) -> Control:
 	for drop_zone in drop_zones:
 		if drop_zone and is_instance_valid(drop_zone):
 			var zone_rect = drop_zone.get_global_rect()
-			var block_center = global_pos
-			
-			if zone_rect.has_point(block_center):
+			print("Comprobando zona: ", drop_zone.name, " Rect: ", zone_rect, " Mouse: ", global_pos)
+			if zone_rect.has_point(global_pos):
 				return drop_zone
 	return null
 
 func _return_block_to_palette(block: DraggableBlock):
-	print("Returning block to palette")
-	
 	var palette_container = block_palette.get_node_or_null("ScrollContainer/GridContainer")
-	if not palette_container:
-		print("ERROR: Palette container not found")
-		return
+	if not palette_container: return
 	
-	# Remover del padre actual
 	if block.get_parent():
 		block.get_parent().remove_child(block)
 	
-	# Agregar a la paleta
 	palette_container.add_child(block)
 	
-	# Posición aproximada en la paleta
-	block.position = Vector2(10, 10 + palette_container.get_child_count() * 70)
-	
-	# Remover de current_blocks si estaba
-	if current_blocks.has(block.block_data):
-		current_blocks.erase(block.block_data)
-		update_ram_display()
-	
-	print("Block returned to palette")
+	# Forzamos actualización de RAM al sacar el bloque del workspace
+	await get_tree().process_frame
+	update_blocks_from_workspace()
 
 func _get_workspace_block_count() -> int:
 	var drop_zone = workspace.get_node_or_null("DropZone")
@@ -778,69 +691,44 @@ func _highlight_drop_zones(highlight: bool):
 
 # === Funcionalidad de Botones ===
 func _on_test_button_pressed():
-	print("Testing piece programming...")
+	# 1. Asegurarnos de que los datos están sincronizados con lo que se ve en pantalla
+	update_blocks_from_workspace()
 	
-	if not current_piece:
-		print("No piece selected for testing")
+	if current_blocks.is_empty():
+		print("AVISO: No hay bloques para ejecutar.")
 		return
-	
+
+	# 2. VALIDACIÓN DE RAM: Si se pasa del límite, abortamos ejecución
 	var used_ram = calculate_current_ram_usage()
-	var available_ram = current_piece.available_ram
-	
-	print("Test - RAM Usage: ", used_ram, "/", available_ram)
-	print("Test - Blocks count: ", current_blocks.size())
-	
-	if used_ram > available_ram:
-		print("RAM limit exceeded: ", used_ram, "/", available_ram)
-	elif current_blocks.is_empty():
-		print("No blocks programmed")
-	else:
-		print("Test passed! RAM usage: ", used_ram, "/", available_ram)
+	if used_ram > current_piece.available_ram:
+		print("ERROR: RAM insuficiente (%d/%d). Reduce los bloques." % [used_ram, current_piece.available_ram])
+		# Aquí podrías añadir un efecto visual al RAMCounter para que parpadee en rojo
+		return
+
+	var gm = get_node_or_null("/root/Main/GameManager")
+	if gm and current_piece:
+		# Guardamos formalmente antes de ejecutar
+		gm.save_piece_program(current_piece, current_blocks)
+		print("Ejecutando programa para: ", current_piece.piece_type)
+		
+		# Cerramos primero para limpiar la UI y luego disparamos el turno
+		_close_interface()
+		gm.execute_turn_and_switch()
 
 func _on_save_button_pressed():
-	if current_piece:
-		var final_blocks = []
+	update_blocks_from_workspace()
+	
+	if current_piece and is_instance_valid(current_piece):
+		# 1. Guardamos en la variable de la pieza como respaldo local
+		current_piece.behavior_script = current_blocks.duplicate(true)
 		
-		# Usamos la referencia que ya definiste en tus @onready al principio del script
-		# En tu caso es: workspace -> que apunta a $UI/MainContainer/CenterPanel/Workspace
-		var drop_zone = workspace.get_node_or_null("DropZone")
-		
-		if drop_zone:
-			# 1. Filtramos solo los nodos que son DraggableBlock
-			var children = []
-			for child in drop_zone.get_children():
-				if child is DraggableBlock:
-					children.append(child)
-			
-			# 2. Ordenamos por posición Y (ejecución de arriba hacia abajo)
-			children.sort_custom(func(a, b): return a.position.y < b.position.y)
-			
-			for block in children:
-				if not block.block_data.is_empty():
-					final_blocks.append(block.block_data)
-		
-		# 3. BUSCAR EL GAMEMANAGER (Esta es la solución al error de Identifier not declared)
+		# 2. Guardamos en el GameManager para la ejecución global
 		var gm = get_node_or_null("/root/Main/GameManager")
-		
 		if gm:
-			# Guardamos el programa en el diccionario central del GM
-			gm.save_piece_program(current_piece, final_blocks)
+			gm.save_piece_program(current_piece, current_blocks)
+			print("Guardado exitoso. Bloques en memoria: ", current_blocks.size())
 			
-			# OPCIONAL: Para el test del peón, si quieres que se mueva JUSTO al guardar
-			# puedes descomentar la siguiente línea:
-			# gm.execute_piece_program(current_piece)
-		else:
-			print("ERROR: No se pudo encontrar el GameManager en /root/Main/GameManager")
-		
-		# 4. Actualizar la pieza localmente
-		if current_piece.has_method("update_programming"):
-			current_piece.update_programming(final_blocks)
-		
-		print("--- GUARDADO EXITOSO ---")
-		print("Pieza ID: ", current_piece.get_instance_id())
-		print("Bloques: ", final_blocks) 
-		
-		_close_interface()
+	_close_interface()
 
 func _on_cancel_button_pressed():
 	print("Cancelling programming...")
@@ -880,3 +768,23 @@ func _input(event):
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		_close_interface()
 		get_viewport().set_input_as_handled()
+
+func _on_workspace_changed(_node):
+	# Esperamos un frame para que el nodo esté totalmente integrado
+	await get_tree().process_frame
+	update_ram_display()
+
+
+func _on_drop_zone_child_order_changed() -> void:
+	# Verificamos si el nodo aún es parte del árbol de escenas
+	if not is_inside_tree(): 
+		return
+		
+	# Intentamos obtener el tree de forma segura
+	var tree = get_tree()
+	if tree:
+		await tree.process_frame
+		# Doble verificación después del await (por si se cerró durante la espera)
+		if is_inside_tree():
+			update_ram_display()
+			print("Detectado cambio en la jerarquía del Workspace. RAM recalculada.")

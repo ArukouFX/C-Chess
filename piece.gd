@@ -4,8 +4,8 @@ signal released(piece, world_position)
 signal right_clicked(piece)
 
 var piece_id: String = ""
-var piece_color: String = ""
 var piece_type: String = ""
+var piece_color: String = ""
 var original_modulate: Color = Color.WHITE
 
 # Sistema de programación
@@ -49,9 +49,6 @@ func setup_piece(tex: Texture2D, color: String, type: String, board_pos: Vector2
 		var default_ram = {"pawn": 8, "horse": 16, "bishop": 20, "tower": 24, "queen": 32, "king": 12}
 		available_ram = default_ram.get(type, 8)
 	
-	# --- Cargar programa guardado si existe en el GameManager ---
-	_load_saved_program_from_manager()
-	
 	used_ram = 0
 	behavior_script = []
 	is_programmed = false
@@ -66,14 +63,6 @@ func setup_piece(tex: Texture2D, color: String, type: String, board_pos: Vector2
 	$Area2D/CollisionShape2D.shape = shape
 	$Area2D/CollisionShape2D.position = Vector2.ZERO
 
-func _load_saved_program_from_manager():
-	# Buscamos el GameManager
-	var gm = get_node_or_null("/root/Main/GameManager")
-	if gm and gm.has_method("get_piece_program"):
-		var saved_script = gm.get_piece_program(piece_id)
-		if not saved_script.is_empty():
-			update_programming(saved_script)
-			print("Piece ", piece_id, ": Programa cargado desde GameManager")
 
 # Esta función se llamará desde la ProgrammingInterface al darle a "Guardar"
 func save_program_to_manager(new_script: Array):

@@ -72,7 +72,7 @@ text = "Guardar"
 [node name="CancelButton" type="Button" parent="UI/MainContainer/LeftPanel/ControlButtons"]
 layout_mode = 2
 theme_override_fonts/font = ExtResource("1_x7mol")
-text = "Cancelar"
+text = "Cerrar"
 
 [node name="BlockPalette" type="PanelContainer" parent="UI/MainContainer/LeftPanel"]
 modulate = Color(0.533333, 0.752941, 0.439216, 1)
@@ -99,8 +99,15 @@ text = "Área de Programación"
 modulate = Color(0.389287, 0.389287, 0.389287, 1)
 layout_mode = 2
 
-[node name="DropZone" type="Control" parent="UI/MainContainer/CenterPanel/Workspace"]
+[node name="ScrollContainer" type="ScrollContainer" parent="UI/MainContainer/CenterPanel/Workspace"]
+custom_minimum_size = Vector2(200, 300)
 layout_mode = 2
+
+[node name="DropZone" type="VBoxContainer" parent="UI/MainContainer/CenterPanel/Workspace/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 5
 
 [node name="RightPanel" type="VBoxContainer" parent="UI/MainContainer"]
 layout_mode = 2
@@ -141,3 +148,5 @@ theme_override_colors/font_shadow_color = Color(0.878431, 0.972549, 0.815686, 1)
 theme_override_colors/font_outline_color = Color(0.533333, 0.752941, 0.439216, 1)
 theme_override_fonts/font = ExtResource("1_x7mol")
 theme_override_font_sizes/font_size = 25
+
+[connection signal="child_order_changed" from="UI/MainContainer/CenterPanel/Workspace/ScrollContainer/DropZone" to="." method="_on_drop_zone_child_order_changed"]

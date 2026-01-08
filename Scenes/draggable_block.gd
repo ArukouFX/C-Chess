@@ -5,6 +5,10 @@ class_name DraggableBlock
 signal block_dragged(block, global_position)
 signal block_dropped(block, global_position)
 
+var block_id: String = "move_forward" # Esto se debería asignar al instanciar el bloque
+func get_block_type() -> String:
+	return block_id
+
 var base_size = Vector2(180, 60)
 
 var block_data: Dictionary
@@ -34,10 +38,14 @@ func _find_node_recursive(root: Node, node_name: String) -> Node:
 func setup_block(data: Dictionary):
 	block_data = data
 	
+	# Usamos data.get("llave", "valor_por_defecto") para evitar el error
 	if block_name_label:
-		block_name_label.text = data["name"]
+		block_name_label.text = data.get("name", "Sin Nombre")
+		
 	if ram_cost_label:
-		ram_cost_label.text = "RAM: " + str(data["ram_cost"])
+		var cost = data.get("ram_cost", 0)
+		ram_cost_label.text = "RAM: " + str(cost)
+		
 	if color_rect:
 		var category_colors = {
 			"movement": Color.ROYAL_BLUE,
@@ -46,10 +54,9 @@ func setup_block(data: Dictionary):
 			"sensor": Color.DARK_ORANGE,
 			"control": Color.PURPLE
 		}
-		color_rect.color = category_colors.get(data.get("category", "movement"), Color.GRAY)
+		var category = data.get("category", "movement")
+		color_rect.color = category_colors.get(category, Color.GRAY)
 	
-	# El tamaño ahora se ajusta desde programming_interface.gd
-	# Solo establecer mínimo
 	custom_minimum_size = base_size
 	size = base_size
 
@@ -89,29 +96,52 @@ func _input(event):
 		emit_signal("block_dragged", self, get_global_mouse_position())
 		get_viewport().set_input_as_handled()
 
-# En draggable_block.gd, verificar que estas funciones existan:
 func _start_drag(event: InputEventMouseButton):
-	print("START DRAG: ", block_data["name"])
-	
+	# Si el bloque está en la paleta (no en el workspace)
+	if not is_in_workspace:
+		_spawn_clone_for_dragging()
+		return # Detenemos el drag del bloque original
+
+	# Lógica normal para bloques que YA están en el workspace
 	is_dragging = true
 	drag_offset = get_global_mouse_position() - global_position
-	original_position = global_position
-	original_parent = get_parent()
+	# ... resto de tu código original ...
+
+func _spawn_clone_for_dragging():
+	var clone = duplicate()
+	clone.setup_block(block_data)
+	clone.block_id = block_id
 	
-	# Mover al frente
-	z_index = 100
-	modulate = Color(1.3, 1.3, 0.7)
+	var interface = _find_programming_interface()
+	if interface:
+		# Lo añadimos a la interfaz para que herede su CanvasLayer (si tiene)
+		interface.add_child(clone)
+		# ¡IMPORTANTE! Forzamos que sea el último hijo para estar al frente
+		interface.move_child(clone, -1)
+	else:
+		get_tree().root.add_child(clone)
 	
+	# Usamos global_position para ignorar offsets de padres
+	clone.global_position = get_global_mouse_position() - (clone.size / 2)
+	clone.z_index = 100 
+	clone._force_start_drag()
+
+func _force_start_drag():
+	is_dragging = true
+	drag_offset = size / 2
+	modulate = Color(1.2, 1.2, 1.2, 0.8) # Un poco de transparencia ayuda
 	emit_signal("block_dragged", self, get_global_mouse_position())
 
-func _end_drag(event: InputEventMouseButton):
-	print("END DRAG: ", block_data["name"])
-	
+func _end_drag(event):
 	is_dragging = false
-	z_index = 0
-	modulate = Color.WHITE
 	
-	emit_signal("block_dropped", self, get_global_mouse_position())
+	var workspace_node = _find_workspace()
+	if workspace_node and _is_over_workspace(workspace_node):
+		_move_to_workspace(workspace_node)
+	else:
+		# Si el bloque es un clon recién sacado de la paleta y no cayó en el sitio
+		# lo eliminamos para no llenar la pantalla de basura
+		queue_free()
 
 func _return_to_palette():
 	if original_parent:
@@ -129,60 +159,38 @@ func _return_to_palette():
 		queue_free()
 
 func _find_workspace():
-	# Buscar ProgrammingInterface primero
-	var programming_interface = null
+	# 1. Intentar por Grupo (La forma más robusta en Godot)
+	var nodes_in_group = get_tree().get_nodes_in_group("workspace_dropzone")
+	if nodes_in_group.size() > 0:
+		return nodes_in_group[0]
 	
-	# Buscar en toda la escena
-	for node in get_tree().get_nodes_in_group("programming_interface"):
-		programming_interface = node
-		break
-	
-	# Si no está en grupo, buscar por nombre
-	if not programming_interface:
-		for node in get_tree().get_nodes_in_group(""):
-			if "ProgrammingInterface" in node.name:
-				programming_interface = node
-				break
-	
-	# Si aún no, buscar en root
-	if not programming_interface:
-		for child in get_tree().root.get_children():
-			if child.name == "ProgrammingInterface" or child.has_method("setup_for_piece"):
-				programming_interface = child
-				break
-	
-	if programming_interface:
-		print("Found ProgrammingInterface")
-		# Buscar DropZone dentro
-		var dropzone = programming_interface.get_node_or_null("UI/MainContainer/CenterPanel/Workspace/DropZone")
-		if dropzone:
-			return dropzone
-		
-		# Intentar otras rutas
-		dropzone = programming_interface.get_node_or_null("Workspace/DropZone")
-		if dropzone:
-			return dropzone
-		
-		dropzone = programming_interface.get_node_or_null("DropZone")
-		if dropzone:
-			return dropzone
-	
-	print("Workspace not found")
+	# 2. Si falla el grupo, buscar a través de la interfaz padre
+	var interface = _find_programming_interface()
+	if interface:
+		# find_child con el parámetro 'true' busca recursivamente en todos los hijos
+		var dz = interface.find_child("DropZone", true, false)
+		if dz:
+			return dz
+			
+	# 3. Último recurso: Búsqueda global por nombre (lenta pero segura)
+	return get_tree().root.find_child("DropZone", true, false)
+
+func _find_programming_interface() -> Node:
+	# Subimos por el árbol de nodos hasta encontrar la interfaz
+	var current = get_parent()
+	while current != null:
+		# Verificamos si es la interfaz por grupo o por método conocido
+		if current.is_in_group("programming_interface") or current.has_method("setup_for_piece"):
+			return current
+		current = current.get_parent()
 	return null
 
-func _is_over_workspace(workspace: Control) -> bool:
-	if not workspace:
-		return false
-	
-	var workspace_rect = Rect2(workspace.global_position, workspace.size)
-	var block_center = global_position + size / 2
-	
-	print("Checking workspace overlap:")
-	print("     - Workspace rect: ", workspace_rect)
-	print("     - Block center: ", block_center)
-	print("     - Overlap: ", workspace_rect.has_point(block_center))
-	
-	return workspace_rect.has_point(block_center)
+func _is_over_workspace(workspace_node: Control) -> bool:
+	if not workspace_node: return false
+	# get_global_rect() tiene en cuenta la posición real en la pantalla
+	# sumada al scroll actual.
+	var rect = workspace_node.get_global_rect()
+	return rect.has_point(get_global_mouse_position())
 
 func _move_to_workspace(workspace: Control):
 	if get_parent():
@@ -191,13 +199,18 @@ func _move_to_workspace(workspace: Control):
 	workspace.add_child(self)
 	is_in_workspace = true
 	
-	# Posicionar en el workspace (ajustar posición local)
-	var local_pos = get_global_mouse_position() - workspace.global_position
-	position = Vector2(20, max(local_pos.y, 10))
+	# RESETEAR PARA CONTENEDOR
+	# Al ser hijo de un VBoxContainer, estas propiedades deben estar limpias
+	position = Vector2.ZERO
+	custom_minimum_size = base_size # El tamaño que definimos al inicio
 	
-	# Asegurar que sea visible
+	# Importante: Para que el VBoxContainer lo maneje, el layout_mode debe ser 0
+	# y los size_flags deben permitir el llenado horizontal
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	# Visuales
 	visible = true
 	modulate = Color.WHITE
-	z_index = 1000
+	z_index = 0
 	
-	print("Successfully moved to workspace at position: ", position)
+	print("Bloque auto-posicionado por VBoxContainer")
