@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://b3ekqwhw7mj1n"]
+
+[ext_resource type="Script" uid="uid://bqk6pr7nd2nhe" path="res://Scenes/ResolutionManager.gd" id="1_ay8y4"]
+
+[node name="ResolutionManager" type="Node"]
+script = ExtResource("1_ay8y4")

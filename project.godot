@@ -25,7 +25,10 @@ BlockSystem="*res://block_system.gd"
 
 [display]
 
+window/size/viewport_width=1360
+window/size/viewport_height=768
 window/size/mode=2
+window/stretch/mode="canvas_items"
 
 [rendering]
 

@@ -1,0 +1,73 @@
+[gd_scene load_steps=3 format=3 uid="uid://cpy0jvgu31kpn"]
+
+[ext_resource type="Script" uid="uid://cwlgp433qs0tc" path="res://Scenes/settings_menu.gd" id="1_8uw7q"]
+[ext_resource type="FontFile" uid="uid://c1jvicc2lfsth" path="res://ConnectionII.otf" id="2_bxjf0"]
+
+[node name="SettingsMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_8uw7q")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+color = Color(1, 1, 1, 0.521569)
+
+[node name="PanelContainer" type="PanelContainer" parent="."]
+layout_mode = 0
+offset_right = 8.0
+offset_bottom = 8.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Label" type="Label" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_bxjf0")
+text = "OPCIONES"
+
+[node name="HSeparator" type="HSeparator" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="PanelContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_bxjf0")
+text = "Resolución:"
+
+[node name="ResolutionOptionButton" type="OptionButton" parent="PanelContainer/VBoxContainer/HBoxContainer"]
+custom_minimum_size = Vector2(200, 30)
+layout_mode = 2
+
+[node name="FullscreenCheckBox" type="CheckBox" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_bxjf0")
+text = "Pantalla completa"
+
+[node name="HSeparator2" type="HSeparator" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="ApplyButton" type="Button" parent="PanelContainer/VBoxContainer/HBoxContainer2"]
+custom_minimum_size = Vector2(100, 40)
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_bxjf0")
+text = "APLICAR"
+
+[node name="CloseButton" type="Button" parent="PanelContainer/VBoxContainer/HBoxContainer2"]
+custom_minimum_size = Vector2(100, 40)
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_bxjf0")
+text = "CERRAR"
+
+[connection signal="gui_input" from="." to="." method="_on_gui_input"]
