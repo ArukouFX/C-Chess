@@ -130,8 +130,7 @@ This project is distributed under the **MIT License**. You are free to use, modi
 <div align="center">
     <h1>Versión en Español</h1>
 </div>
----
----
+
 
 # ♟️ C-Chess: Ajedrez Programable
 
