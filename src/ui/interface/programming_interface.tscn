@@ -1,0 +1,152 @@
+[gd_scene load_steps=4 format=3 uid="uid://8wwsld3yy3s4"]
+
+[ext_resource type="Script" uid="uid://c01h7mjxli8x2" path="res://src/ui/interface/programming_interface.gd" id="1_lg07q"]
+[ext_resource type="FontFile" uid="uid://c1jvicc2lfsth" path="res://assets/fonts/ConnectionII.otf" id="1_x7mol"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4aigi"]
+bg_color = Color(0.372365, 0.667738, 0.573103, 1)
+
+[node name="PogrammingInterface" type="Control"]
+layout_mode = 3
+anchors_preset = 0
+offset_top = -20.0
+offset_bottom = -20.0
+size_flags_horizontal = 8
+script = ExtResource("1_lg07q")
+
+[node name="UI" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -257.0
+offset_top = -65.0
+offset_right = 257.0
+offset_bottom = 65.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MainContainer" type="HBoxContainer" parent="UI"]
+layout_mode = 2
+
+[node name="LeftPanel" type="VBoxContainer" parent="UI/MainContainer"]
+layout_mode = 2
+
+[node name="PieceInfo" type="PanelContainer" parent="UI/MainContainer/LeftPanel"]
+modulate = Color(0.533333, 0.752941, 0.439216, 1)
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="UI/MainContainer/LeftPanel/PieceInfo"]
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/MainContainer/LeftPanel/PieceInfo/HBoxContainer"]
+layout_mode = 2
+
+[node name="PieceName" type="Label" parent="UI/MainContainer/LeftPanel/PieceInfo/HBoxContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="PieceType" type="Label" parent="UI/MainContainer/LeftPanel/PieceInfo/HBoxContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="PieceStatus" type="Label" parent="UI/MainContainer/LeftPanel/PieceInfo/HBoxContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="TextureRect" type="TextureRect" parent="UI/MainContainer/LeftPanel/PieceInfo/HBoxContainer"]
+layout_mode = 2
+
+[node name="ControlButtons" type="HBoxContainer" parent="UI/MainContainer/LeftPanel"]
+modulate = Color(0.533333, 0.752941, 0.439216, 1)
+layout_mode = 2
+
+[node name="TestButton" type="Button" parent="UI/MainContainer/LeftPanel/ControlButtons"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("1_x7mol")
+theme_override_styles/focus = SubResource("StyleBoxFlat_4aigi")
+text = "Ejecutar"
+
+[node name="SaveButton" type="Button" parent="UI/MainContainer/LeftPanel/ControlButtons"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("1_x7mol")
+text = "Guardar"
+
+[node name="CancelButton" type="Button" parent="UI/MainContainer/LeftPanel/ControlButtons"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("1_x7mol")
+text = "Cerrar"
+
+[node name="BlockPalette" type="PanelContainer" parent="UI/MainContainer/LeftPanel"]
+modulate = Color(0.533333, 0.752941, 0.439216, 1)
+layout_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="UI/MainContainer/LeftPanel/BlockPalette"]
+layout_mode = 2
+
+[node name="GridContainer" type="GridContainer" parent="UI/MainContainer/LeftPanel/BlockPalette/ScrollContainer"]
+layout_mode = 2
+
+[node name="CenterPanel" type="VBoxContainer" parent="UI/MainContainer"]
+layout_mode = 2
+
+[node name="Workspace" type="PanelContainer" parent="UI/MainContainer/CenterPanel"]
+modulate = Color(0.533333, 0.752941, 0.439216, 1)
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/MainContainer/CenterPanel/Workspace"]
+layout_mode = 2
+text = "Área de Programación"
+
+[node name="ColorRect" type="ColorRect" parent="UI/MainContainer/CenterPanel/Workspace"]
+modulate = Color(0.389287, 0.389287, 0.389287, 1)
+layout_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="UI/MainContainer/CenterPanel/Workspace"]
+custom_minimum_size = Vector2(200, 300)
+layout_mode = 2
+
+[node name="DropZone" type="VBoxContainer" parent="UI/MainContainer/CenterPanel/Workspace/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 5
+
+[node name="RightPanel" type="VBoxContainer" parent="UI/MainContainer"]
+layout_mode = 2
+
+[node name="RAMCounter" type="HBoxContainer" parent="UI/MainContainer/RightPanel"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/MainContainer/RightPanel/RAMCounter"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.0313726, 0.0941176, 0.12549, 1)
+theme_override_colors/font_shadow_color = Color(0.878431, 0.972549, 0.815686, 1)
+theme_override_colors/font_outline_color = Color(0.533333, 0.752941, 0.439216, 1)
+theme_override_fonts/font = ExtResource("1_x7mol")
+theme_override_font_sizes/font_size = 25
+text = "RAM:"
+
+[node name="RAMUsed" type="Label" parent="UI/MainContainer/RightPanel/RAMCounter"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.0313726, 0.0941176, 0.12549, 1)
+theme_override_colors/font_shadow_color = Color(0.878431, 0.972549, 0.815686, 1)
+theme_override_colors/font_outline_color = Color(0.533333, 0.752941, 0.439216, 1)
+theme_override_fonts/font = ExtResource("1_x7mol")
+theme_override_font_sizes/font_size = 25
+
+[node name="Label2" type="Label" parent="UI/MainContainer/RightPanel/RAMCounter"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.0313726, 0.0941176, 0.12549, 1)
+theme_override_colors/font_shadow_color = Color(0.878431, 0.972549, 0.815686, 1)
+theme_override_colors/font_outline_color = Color(0.533333, 0.752941, 0.439216, 1)
+theme_override_fonts/font = ExtResource("1_x7mol")
+theme_override_font_sizes/font_size = 25
+text = "/"
+
+[node name="RAMTotal" type="Label" parent="UI/MainContainer/RightPanel/RAMCounter"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.0313726, 0.0941176, 0.12549, 1)
+theme_override_colors/font_shadow_color = Color(0.878431, 0.972549, 0.815686, 1)
+theme_override_colors/font_outline_color = Color(0.533333, 0.752941, 0.439216, 1)
+theme_override_fonts/font = ExtResource("1_x7mol")
+theme_override_font_sizes/font_size = 25
+
+[connection signal="child_order_changed" from="UI/MainContainer/CenterPanel/Workspace/ScrollContainer/DropZone" to="." method="_on_drop_zone_child_order_changed"]

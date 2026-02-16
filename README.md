@@ -1,253 +1,280 @@
-# ♟️ C-Chess: Ajedrez Programable / Programmable Chess
+# ♟️ C-Chess — Ajedrez Programable / Programmable Chess
 
 ---
+
 <div align="center">
-    <h1>English Version</h1>
+    <h2>English Version</h2>
 </div>
----
 
-# ♟️ C-Chess: Programmable Chess
+## ♟️ C-Chess: Programmable Chess
 
-**C-Chess** is a turn-based strategy project developed in **Godot Engine 4.x** that combines classic chess mechanics with an innovative **programmable block system**.
+**C-Chess** is an educational, turn-based strategy game developed with **Godot Engine 4.x**. It extends traditional chess by allowing players to **program the behavior of each piece**, promoting **computational thinking**, **algorithmic reasoning**, and **problem decomposition** through a visual, block-based approach.
 
-The goal is to explore how **visual programming and modular logic** can be integrated to give each piece an autonomous and customizable behavior.
-
----
-
-## 🧠 Block System (BlockSystem)
-
-This is the project's central logic engine. It functions as an interpreter that:
-* Defines and manages action blocks (move, capture, conditions, etc.).
-* Assigns virtual resource limits (**"RAM"**) to each piece.
-* Allows the creation of **visual scripts** (sequences of blocks) that pieces execute automatically on their turn.
-
-This enables programmable chess where strategies are defined at a modular code level.
+Rather than directly controlling pieces every turn, players design **programs** that define how each piece should behave when its turn is executed.
 
 ---
 
-## 🧩 Project Structure
+## 🎯 Educational Purpose
+
+C-Chess is designed as a didactic tool with the following goals:
+
+* Introduce **programming concepts** through a familiar domain (chess).
+* Encourage **computational thinking**: sequencing, conditions, resource constraints, and validation.
+* Bridge the gap between **visual programming** and formal code logic.
+* Provide an experimental platform for autonomous behavior in turn-based games.
+
+---
+
+## 🧠 Block System (Core Concept)
+
+The **Block System** acts as a lightweight interpreter that executes visual programs assigned to chess pieces.
+
+Each piece:
+
+* Has a limited virtual resource (**RAM**).
+* Executes a sequence of action and logic blocks during its turn.
+* Behaves autonomously according to its programmed logic.
+
+### Supported Concepts
+
+* Action blocks (movement, capture, etc.)
+* Conditional blocks (enemy detection, state checks)
+* Script validation before execution
+* RAM cost calculation and enforcement
+
+This transforms chess into a programmable system where **strategy emerges from logic design**, not direct input.
+
+---
+
+## 🧩 Core Scenes Overview
 
 ### 🎮 Main Scene (`Main.tscn`)
 
-Contains the fundamental nodes that orchestrate the game:
+The main orchestrator of the game. It integrates gameplay logic, board state, UI, and audio.
 
-* **`_GameManager`**: Core logic (turn management, victory conditions, etc.).
-* **`_Table`**: Representation of the chessboard.
-* **`_Pieces`**: Contains and manages all pieces in play.
-* **`_Turn`**: Controls and displays the current turn.
-* **`_BackGround`**: Visual background of the board.
-* **`_CanvasLayer`**: Layer for the User Interface (UI).
-* **`_Camera`**: Main scene camera.
-* **`_Music`**: Background music controller.
-* **`_Node (test_block.gd)`**: Auxiliary node used for testing the block system.
+Key components:
 
----
-
-### 🧱 Secondary Scene (`Board.tscn`)
-
-Defines the playing area and its interactions:
-
-* **`_Board`**: Main board node.
-    * `Sprite2D`: Graphical representation.
-    * `Area2D`: Detects interactions and collisions.
-    * `CollisionShape2D`: Defines the physical interaction area.
+* **GameManager** — Controls turns, state transitions, and high-level rules.
+* **Board** — Visual and logical representation of the chessboard.
+* **Pieces** — Container and manager for all chess pieces.
+* **TurnDisplay** — Visual indicator of the active player.
+* **ProgrammingInterface** — UI used to program individual pieces.
+* **Camera2D** — Main camera controller.
+* **CanvasLayer** — User interface layer.
+* **Music** — Background music controller.
 
 ---
 
-## ⚙️ Key Scripts
+### 🧱 Board Scene (`Board.tscn`)
 
-### `test_block.gd`
+Defines the playable area and interaction boundaries:
 
-Testing script focused on verifying the functionality of the **BlockSystem**:
-
-* **Testable Features:**
-    * Get block information (`get_block_info`).
-    * Filtering by categories (`get_blocks_by_category`).
-    * Piece RAM capacity (`get_piece_ram_capacity`).
-    * Script RAM usage calculation (`calculate_ram_usage`).
-    * Script validation (`is_script_valid`).
-
-* **Test Script Example:**
-    ```gdscript
-    var test_script = [
-        {"type": "move_forward"},
-        {"type": "if_enemy_front"}, 
-        {"type": "capture"}
-    ]
-    ```
-
-### `turn_display.gd`
-
-Controls the visualization and animation of the current turn:
-
-* Shows which player has the turn (**white** or **black**).
-* Applies a cyclical visual animation to add dynamism to the turn indicator.
-
-* **Update Function:**
-    ```gdscript
-    func update_turn(turn: String):
-        if turn == "white":
-            texture = load("res://Assets/turn-white.png")
-        else:
-            texture = load("res://Assets/turn-black.png")
-    ```
+* `Sprite2D` — Board texture.
+* `Area2D` — Input and collision detection.
+* `CollisionShape2D` — Physical interaction limits.
 
 ---
 
-## 🚀 How to Run the Project
+### ♟️ Piece Scene (`Piece.tscn`)
 
-1.  Open the project in **Godot Engine 4.x**.
-2.  Load the main scene `Main.tscn`.
-3.  Press the **Run** button (`▶️ Run`).
-4.  Use the console to see the results of the `test_block.gd` tests.
+Represents an individual chess piece:
+
+* Owns its **programmed logic**.
+* Interacts with the board through collisions.
+* Executes block scripts when activated by the game manager.
 
 ---
 
-## 📚 Project Goals
+### 🧪 Draggable Block (`DraggableBlock.tscn`)
 
-* Integrate modular logic (blocks) into a classic strategy game.
-* Experiment with basic **Artificial Intelligence (AI)** by creating visual scripts for the pieces.
-* Develop a scalable and maintainable architecture for future turn-based strategy games.
+Visual representation of a programming block:
+
+* Header with icon and name.
+* Footer with RAM cost.
+* Drag-and-drop enabled via `Area2D`.
+
+Used inside the programming workspace to assemble logic sequences.
+
+---
+
+### 🖥️ Programming Interface (`ProgrammingInterface.tscn`)
+
+The central educational UI of the project. It allows players to visually program pieces.
+
+Panels:
+
+* **Left Panel** — Piece information and block palette.
+* **Center Panel** — Workspace (DropZone) where programs are assembled.
+* **Right Panel** — RAM usage monitor (used vs total).
+
+Includes controls to:
+
+* Test scripts
+* Save logic to a piece
+* Cancel or reset changes
+
+---
+
+### ⚙️ Settings Menu (`SettingsMenu.tscn`)
+
+Provides basic configuration options:
+
+* Screen resolution
+* Fullscreen toggle
+* Apply and close controls
+
+---
+
+## 📁 Planned Project Structure (TODO)
+
+A refactor is planned to improve maintainability and scalability:
+
+```text
+res://
+├── assets/
+│   ├── fonts/
+│   ├── graphics/
+│   ├── music/
+│   └── shaders/
+├── src/
+│   ├── core/        (GameManager, ExecutionManager, ResolutionManager)
+│   ├── entities/    (Board, Piece)
+│   ├── ui/          (ProgrammingInterface, SettingsMenu, TurnDisplay)
+│   └── programming/ (DraggableBlock, block_system, tests)
+├── README.md
+└── icon.svg
+```
+
+---
+
+## ⚙️ Notable Scripts
+
+### `block_system.gd`
+
+Defines:
+
+* Available blocks
+* RAM cost per block
+* Validation rules
+* Execution logic
+
+This script is the backbone of the programmable behavior system.
+
+---
+
+### `execution_manager.gd`
+
+Responsible for:
+
+* Interpreting validated block scripts
+* Executing actions in sequence
+* Handling conditional flow
+
+---
+
+## 🚀 How to Run
+
+1. Open the project in **Godot Engine 4.x**.
+2. Load `Main.tscn`.
+3. Press **Run** (`▶`).
+4. Select a piece and open the programming interface to assign logic.
+
+---
+
+## 📚 Project Scope
+
+C-Chess is both:
+
+* A **technical experiment** in visual programming systems.
+* An **educational prototype** aimed at teaching programming fundamentals through gameplay.
+
+It is suitable as:
+
+* An academic project
+* A foundation for further AI experimentation
+* A base for educational game research
 
 ---
 
 ## 👨‍💻 Author
 
 **Felipe Carballo**
-Software Developer and Systems Analysis student.
+Software Developer — Systems Analysis Student
 
-* [GitHub](https://github.com/ArukouFX)
-* [LinkedIn](https://www.linkedin.com/in/felipecarballolovato/)
+* GitHub: [https://github.com/ArukouFX](https://github.com/ArukouFX)
+* LinkedIn: [https://www.linkedin.com/in/felipecarballolovato/](https://www.linkedin.com/in/felipecarballolovato/)
 
 ---
 
 ## 🧾 License
 
-This project is distributed under the **MIT License**. You are free to use, modify, and distribute the code, provided you retain attribution to the original author.
+MIT License — free to use, modify, and distribute with attribution.
 
 ---
----
+
 <div align="center">
-    <h1>Versión en Español</h1>
+    <h2>Versión en Español</h2>
 </div>
----
----
 
-# ♟️ C-Chess: Ajedrez Programable
+## ♟️ C-Chess: Ajedrez Programable
 
-**C-Chess** es un proyecto de estrategia por turnos desarrollado en **Godot Engine 4.x** que combina las mecánicas clásicas del ajedrez con un innovador **sistema de bloques programables**.
+**C-Chess** es un juego educativo de estrategia por turnos desarrollado con **Godot Engine 4.x**. Amplía el ajedrez tradicional permitiendo **programar el comportamiento de cada pieza**, fomentando el **pensamiento computacional**, la **lógica algorítmica** y la **resolución de problemas** mediante programación visual.
 
-El objetivo es explorar cómo la **programación visual y la lógica modular** pueden integrarse para dar a cada pieza un comportamiento autónomo y personalizable.
+El jugador no controla directamente las piezas en cada turno, sino que diseña **programas** que determinan cómo actuarán de forma autónoma.
 
 ---
 
-## 🧠 Sistema de Bloques (BlockSystem)
+## 🎯 Propósito Educativo
 
-Este es el motor lógico central del proyecto. Funciona como un intérprete que:
-* Define y gestiona bloques de acción (mover, capturar, condiciones, etc.).
-* Asigna límites de recursos virtuales (**"RAM"**) a cada pieza.
-* Permite crear **scripts visuales** (secuencias de bloques) que las piezas ejecutan automáticamente en su turno.
-
-Esto permite un ajedrez programable donde las estrategias se definen a nivel de código modular.
+* Introducir conceptos básicos de programación en un contexto lúdico.
+* Trabajar secuenciación, condiciones y restricciones de recursos.
+* Conectar programación visual con lógica formal.
+* Explorar comportamientos autónomos en juegos por turnos.
 
 ---
 
-## 🧩 Estructura Principal del Proyecto
+## 🧠 Sistema de Bloques
 
-### 🎮 Escena Principal (`Main.tscn`)
+El sistema de bloques funciona como un intérprete lógico:
 
-Contiene los nodos fundamentales que orquestan el juego:
+* Cada pieza posee una cantidad limitada de **RAM**.
+* Los programas se construyen mediante bloques visuales.
+* Los scripts se validan antes de su ejecución.
 
-* **`_GameManager`**: Lógica principal (gestión de turnos, condiciones de victoria, etc.).
-* **`_Table`**: Representación del tablero de ajedrez.
-* **`_Pieces`**: Contiene y gestiona todas las piezas en juego.
-* **`_Turn`**: Controla y muestra el turno actual.
-* **`_BackGround`**: Fondo visual del tablero.
-* **`_CanvasLayer`**: Capa para la interfaz de usuario (UI).
-* **`_Camera`**: Cámara principal de la escena.
-* **`_Music`**: Controlador de música de fondo.
-* **`_Node (test_block.gd)`**: Nodo auxiliar utilizado para pruebas del sistema de bloques.
+Esto convierte al ajedrez en un entorno **programable**, donde la estrategia surge del diseño lógico.
 
 ---
 
-### 🧱 Escena Secundaria (`Board.tscn`)
+## 🧩 Escenas Principales
 
-Define el área de juego y sus interacciones:
-
-* **`_Board`**: Nodo principal del tablero.
-    * `Sprite2D`: Representación gráfica.
-    * `Area2D`: Detecta interacciones y colisiones.
-    * `CollisionShape2D`: Define el área física de interacción.
-
----
-
-## ⚙️ Scripts Clave
-
-### `test_block.gd`
-
-Script de prueba enfocado en verificar la funcionalidad del **BlockSystem**:
-
-* **Funcionalidades testeables:**
-    * Obtener información de bloques (`get_block_info`).
-    * Filtrado por categorías (`get_blocks_by_category`).
-    * Capacidad de memoria RAM de las piezas (`get_piece_ram_capacity`).
-    * Cálculo del uso de RAM en scripts (`calculate_ram_usage`).
-    * Validación de scripts (`is_script_valid`).
-
-* **Ejemplo de Script de Prueba:**
-    ```gdscript
-    var test_script = [
-        {"type": "move_forward"},
-        {"type": "if_enemy_front"}, 
-        {"type": "capture"}
-    ]
-    ```
-
-### `turn_display.gd`
-
-Controla la visualización y animación del turno actual:
-
-* Muestra qué jugador tiene el turno (**blanco** o **negro**).
-* Aplica una animación visual cíclica para dar dinamismo al indicador de turno.
-
-* **Función de Actualización:**
-    ```gdscript
-    func update_turn(turn: String):
-        if turn == "white":
-            texture = load("res://Assets/turn-white.png")
-        else:
-            texture = load("res://Assets/turn-black.png")
-    ```
+* **Main**: Orquesta todo el juego.
+* **Board**: Tablero e interacciones.
+* **Piece**: Representa piezas programables.
+* **ProgrammingInterface**: Entorno visual de programación.
+* **DraggableBlock**: Bloques de lógica arrastrables.
+* **SettingsMenu**: Configuración básica.
 
 ---
 
-## 🚀 Cómo Ejecutar el Proyecto
+## 🚀 Ejecución
 
-1.  Abre el proyecto en **Godot Engine 4.x**.
-2.  Carga la escena principal `Main.tscn`.
-3.  Presiona el botón de **Ejecutar** (`▶️ Run`).
-4.  Usa la consola para ver los resultados de las pruebas de `test_block.gd`.
-
----
-
-## 📚 Objetivos del Proyecto
-
-* Integrar lógica modular (bloques) en un juego clásico de estrategia.
-* Experimentar con **Inteligencia Artificial (IA) básica** mediante la creación de scripts visuales para las piezas.
-* Desarrollar una arquitectura escalable y mantenible para futuros juegos de estrategia por turnos.
+1. Abrir el proyecto en Godot 4.x.
+2. Cargar `Main.tscn`.
+3. Ejecutar el proyecto.
+4. Programar piezas desde la interfaz.
 
 ---
 
-## 👨‍💻 Autor
+## 📚 Alcance del Proyecto
 
-**Felipe Carballo**
-Desarrollador de software y estudiante de Análisis de Sistemas.
+C-Chess funciona como:
 
-* [GitHub](https://github.com/ArukouFX)
-* [LinkedIn](https://www.linkedin.com/in/felipecarballolovato/)
+* Proyecto académico
+* Prototipo educativo
+* Base experimental para sistemas de programación visual
 
 ---
 
 ## 🧾 Licencia
 
-Este proyecto se distribuye bajo la **Licencia MIT**. Eres libre de usar, modificar y distribuir el código, siempre que mantengas la atribución al autor original.
+Licencia MIT. Uso libre con atribución al autor.

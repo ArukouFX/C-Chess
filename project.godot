@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="C-Chess"
-run/main_scene="uid://10xfqjyoeplg"
+run/main_scene="uid://dbkaaauv6oh0c"
 config/features=PackedStringArray("4.3.2", "GL Compatibility")
 boot_splash/bg_color=Color(0, 0, 0, 1)
 boot_splash/fullsize=false
@@ -21,7 +21,7 @@ boot_splash/minimum_display_time=2000
 
 [autoload]
 
-BlockSystem="*res://block_system.gd"
+BlockSystem="*res://src/programming/block_system.gd"
 
 [display]
 
@@ -35,3 +35,4 @@ window/stretch/mode="canvas_items"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_clear_color=Color(0.0313726, 0.0941176, 0.12549, 1)

@@ -1,0 +1,218 @@
+[gd_scene load_steps=16 format=3 uid="uid://dbkaaauv6oh0c"]
+
+[ext_resource type="Texture2D" uid="uid://6lt53olcca1y" path="res://assets/graphics/logo-2.png" id="1_62e3q"]
+[ext_resource type="Script" uid="uid://bf7fv4ivlmbxn" path="res://src/ui/menus/mian_menu.gd" id="1_rcus0"]
+[ext_resource type="Shader" uid="uid://bvkmoiob05hns" path="res://assets/shaders/clouds.gdshader" id="2_8am65"]
+[ext_resource type="Texture2D" uid="uid://dp6sjy63c7o4x" path="res://assets/graphics/background.png" id="2_ra04o"]
+[ext_resource type="FontFile" uid="uid://c1jvicc2lfsth" path="res://assets/fonts/ConnectionII.otf" id="2_rcus0"]
+[ext_resource type="Shader" uid="uid://bqehhjpay2p5e" path="res://src/ui/menus/gameboy_buttons.gdshader" id="5_yq2ft"]
+[ext_resource type="Shader" uid="uid://mlt36j70g31y" path="res://assets/shaders/transition.gdshader" id="6_rlngk"]
+[ext_resource type="StyleBox" uid="uid://dclh607xgwjvr" path="res://src/ui/menus/button_style.tres" id="7_wblbt"]
+[ext_resource type="AudioStream" uid="uid://cxq42qqbm0fg8" path="res://assets/music/chess beat.mp3" id="9_oan0s"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_rlngk"]
+shader = ExtResource("2_8am65")
+shader_parameter/speed = 1.0
+shader_parameter/cloud_scale = 3.0
+shader_parameter/softness = 2.0
+shader_parameter/ps1_resolution = 240.0
+shader_parameter/vertex_snap_intensity = 0.5
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_wblbt"]
+shader = ExtResource("5_yq2ft")
+shader_parameter/color_1 = Color(0.878, 0.973, 0.816, 1)
+shader_parameter/color_2 = Color(0.533, 0.753, 0.439, 1)
+shader_parameter/color_3 = Color(0.204, 0.408, 0.337, 1)
+shader_parameter/color_4 = Color(0.031, 0.094, 0.125, 1)
+
+[sub_resource type="Animation" id="Animation_ra04o"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("MainContainer/LogoContainer/Control/Logo:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector2(0, 0)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("MainContainer/LogoContainer/Control/Logo:rotation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [0.0]
+}
+
+[sub_resource type="Animation" id="Animation_rcus0"]
+resource_name = "logo_float"
+length = 2.0
+loop_mode = 1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("MainContainer/LogoContainer/Control/Logo:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 1, 2),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector2(0, 0), Vector2(0, 20), Vector2(0, 0)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("MainContainer/LogoContainer/Control/Logo:rotation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.6, 1.2, 2),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [0.0, 0.0349066, -0.0349066, 0.0]
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_8am65"]
+_data = {
+&"RESET": SubResource("Animation_ra04o"),
+&"logo_float": SubResource("Animation_rcus0")
+}
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_yq2ft"]
+shader = ExtResource("6_rlngk")
+shader_parameter/progress = 1.0
+shader_parameter/pixel_size = 64.0
+shader_parameter/base_color = Color(0.031, 0.094, 0.125, 1)
+
+[node name="MianMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_rcus0")
+
+[node name="Background" type="TextureRect" parent="."]
+material = SubResource("ShaderMaterial_rlngk")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("2_ra04o")
+
+[node name="MainContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -160.0
+offset_top = -276.5
+offset_right = 160.0
+offset_bottom = 276.5
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="LogoContainer" type="CenterContainer" parent="MainContainer"]
+layout_mode = 2
+
+[node name="Control" type="Control" parent="MainContainer/LogoContainer"]
+custom_minimum_size = Vector2(320, 320)
+layout_mode = 2
+
+[node name="Logo" type="TextureRect" parent="MainContainer/LogoContainer/Control"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -160.0
+offset_top = -160.0
+offset_right = 160.0
+offset_bottom = 160.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("1_62e3q")
+
+[node name="Spacer" type="Control" parent="MainContainer"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+
+[node name="ButtonsContainer" type="VBoxContainer" parent="MainContainer"]
+material = SubResource("ShaderMaterial_wblbt")
+layout_mode = 2
+theme_override_constants/separation = 15
+
+[node name="NewGameButton" type="Button" parent="MainContainer/ButtonsContainer"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_rcus0")
+theme_override_styles/focus = ExtResource("7_wblbt")
+text = "Nueva Partida"
+
+[node name="LoadGameButton" type="Button" parent="MainContainer/ButtonsContainer"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_rcus0")
+theme_override_styles/focus = ExtResource("7_wblbt")
+text = "Cargar Partida"
+
+[node name="MultiplayerButton" type="Button" parent="MainContainer/ButtonsContainer"]
+visible = false
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_rcus0")
+theme_override_styles/focus = ExtResource("7_wblbt")
+text = "Multijugador Online"
+
+[node name="SettingsButton" type="Button" parent="MainContainer/ButtonsContainer"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_rcus0")
+theme_override_styles/focus = ExtResource("7_wblbt")
+text = "Ajustes"
+
+[node name="ExitButton" type="Button" parent="MainContainer/ButtonsContainer"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_rcus0")
+theme_override_styles/focus = ExtResource("7_wblbt")
+text = "Salir"
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+libraries = {
+&"": SubResource("AnimationLibrary_8am65")
+}
+autoplay = "logo_float"
+
+[node name="TransitionLayer" type="CanvasLayer" parent="."]
+
+[node name="TransitionRect" type="ColorRect" parent="TransitionLayer"]
+visible = false
+z_index = 10
+material = SubResource("ShaderMaterial_yq2ft")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0313726, 0.0941176, 0.12549, 1)
+
+[node name="Music" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("9_oan0s")
+volume_db = -5.0
+pitch_scale = 0.9
+autoplay = true
+parameters/looping = true
+
+[connection signal="pressed" from="MainContainer/ButtonsContainer/NewGameButton" to="." method="_on_new_game_button_pressed"]
+[connection signal="pressed" from="MainContainer/ButtonsContainer/SettingsButton" to="." method="_on_settings_button_pressed"]

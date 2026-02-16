@@ -1,0 +1,24 @@
+[gd_scene load_steps=6 format=3 uid="uid://fbmsqh4ve7dt"]
+
+[ext_resource type="Script" uid="uid://cvpfyby88edis" path="res://src/entities/board/board.gd" id="1_tnbny"]
+[ext_resource type="Texture2D" uid="uid://dlq7kiv302b0a" path="res://assets/graphics/table.png" id="2_2wvcj"]
+[ext_resource type="Shader" uid="uid://btyhswrv2wtqr" path="res://assets/shaders/board.gdshader" id="2_uh3b8"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_shhme"]
+shader = ExtResource("2_uh3b8")
+shader_parameter/light_strength = 0.3
+shader_parameter/light_dir = Vector2(-0.7, -0.7)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_2wvcj"]
+
+[node name="Board" type="Node2D"]
+script = ExtResource("1_tnbny")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_shhme")
+texture = ExtResource("2_2wvcj")
+
+[node name="Area2D" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
+shape = SubResource("RectangleShape2D_2wvcj")
