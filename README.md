@@ -125,8 +125,6 @@ Software Developer and Systems Analysis student.
 
 This project is distributed under the **MIT License**. You are free to use, modify, and distribute the code, provided you retain attribution to the original author.
 
----
----
 <div align="center">
     <h1>Versión en Español</h1>
 </div>
