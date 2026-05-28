@@ -2,6 +2,8 @@ extends Control
 
 class_name ProgrammingInterface
 
+var LoopPopupScene = preload("res://src/ui/interface/loop_name_popup.tscn")
+
 # Referencias
 @onready var main_container = $UI/MainContainer
 @onready var left_panel = $UI/MainContainer/LeftPanel
@@ -13,6 +15,7 @@ class_name ProgrammingInterface
 @onready var piece_info = $UI/MainContainer/LeftPanel/PieceInfo
 @onready var ram_counter = $UI/MainContainer/RightPanel/RAMCounter
 @onready var control_buttons = $UI/MainContainer/LeftPanel/ControlButtons
+@onready var loop_button = $UI/MainContainer/CenterPanel/Loop
 
 # Tamaños y Constantes
 const BASE_SIZE = Vector2(600, 450)
@@ -52,10 +55,14 @@ func setup_for_piece(piece: Node):
 	
 	# 1. Recuperar del GameManager ANTES de mostrar nada
 	var gm = get_node_or_null("/root/Main/GameManager")
-	if gm and gm.has_method("get_piece_program"):
-		var saved = gm.get_piece_program(piece.piece_id)
-		current_blocks = saved.duplicate(true)
-		print("Data cargada desde GM: ", current_blocks.size())
+	if gm and current_piece:
+		# CORRECCIÓN: Pasamos el piece_id (String), no el nodo entero
+		# Y nos aseguramos de que el GameManager guarde los datos en su diccionario
+		gm.saved_programs[current_piece.piece_id] = current_blocks.duplicate(true)
+		
+		# Si además tu pieza tiene la variable local (para la fase de ejecución)
+		current_piece.behavior_script = current_blocks.duplicate(true)
+		current_piece.is_programmed = not current_blocks.is_empty()
 
 	# 2. Esperar a que la interfaz esté lista en el árbol
 	visible = true # Activamos visibilidad para que Godot la procese
@@ -66,6 +73,16 @@ func setup_for_piece(piece: Node):
 	
 	# 3. Disparar construcción de la interfaz
 	_initialize_interface_logic()
+
+func force_save_to_gamemanager():
+	# 1. Limpiamos la lista local y la reconstruimos desde los nodos reales
+	update_blocks_from_workspace()
+	
+	# 2. Informamos al GameManager con la ruta de escena correcta
+	var gm = get_node_or_null("/root/Main/GameManager") # <--- CORREGIDO
+	if gm and current_piece:
+		gm.saved_programs[current_piece.piece_id] = current_blocks.duplicate(true)
+		print("Sincronización forzada para: ", current_piece.piece_id, " Bloques: ", current_blocks.size())
 
 func _initialize_interface_logic():
 	# 1. Configuración física
@@ -100,7 +117,6 @@ func _initialize_interface_logic():
 	# 5. CARGA CRÍTICA
 	load_workspace_blocks() 
 	
-	_rescale_internal_elements()
 	
 	# Actualización inicial forzada
 	update_ram_display()
@@ -110,82 +126,134 @@ func load_workspace_blocks():
 	# Si no tenemos el DropZone vinculado, lo buscamos ahora
 	if not workspace:
 		workspace = find_child("DropZone", true, false)
-	
 	if not workspace: 
 		print("ERROR CRÍTICO: No hay zona de soltado para contar RAM")
 		return
-	
 	# Limpiar hijos actuales
 	for child in workspace.get_children():
 		if child is DraggableBlock:
 			child.queue_free()
-	
 	print("Instanciando bloques en UI: ", current_blocks.size())
 	for data in current_blocks:
 		var block_instance = DraggableBlockScene.instantiate()
 		workspace.add_child(block_instance)
-		
+		block_instance.is_in_workspace = true
 		# Setup visual
 		block_instance.custom_minimum_size = BASE_BLOCK_SIZE * scale_factor
 		block_instance.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		
 		# Recuperar info completa del sistema de bloques
 		var full_info = BlockSystem.get_block_info(data["type"])
-		block_instance.setup_block(full_info)
+		var setup_data = full_info.duplicate(true)
+		# IMPORTANTE
+		setup_data["type"] = data["type"]
+		# Si el bloque tiene contained_blocks
+		# preservarlos
+		if data.has("contained_blocks"):
+			setup_data["contained_blocks"] = data["contained_blocks"]
+		block_instance.setup_block(setup_data)
 		block_instance.block_id = data["type"]
-		
+		block_instance.block_data = setup_data
 		# Conectar para poder moverlos de nuevo
 		block_instance.block_dragged.connect(_on_block_dragged)
 		block_instance.block_dropped.connect(_on_block_dropped)
-	
 	# Forzar actualización de RAM tras cargar
 	update_ram_display()
+# En programming_interface.gd
 
 func update_ram_display():
 	if not current_piece: return
 	
 	var used_ram = 0
-	var found_blocks = 0
+	var found_blocks_count = 0
+	var movement_blocks_count = 0 # <-- NUEVO: Contador de hilos de movimiento cargados
+	var new_blocks_list = []
 	
-	# 1. Contar bloques en el DropZone
+	# 1. Acceder al DropZone para evaluar los nodos actuales
 	var dz = find_child("DropZone", true, false)
 	if dz:
 		for child in dz.get_children():
-			if child is DraggableBlock and not child.is_queued_for_deletion():
-				found_blocks += 1
-				var info = BlockSystem.get_block_info(child.block_id)
-				used_ram += info.get("ram_cost", 0)
+			# FILTRO CRÍTICO
+			if child is DraggableBlock and child.visible and not child.is_queued_for_deletion():
+				if not child.get("is_dying"):
+					found_blocks_count += 1
+					
+					# Obtener información base del sistema estático
+					var info = BlockSystem.get_block_info(child.block_id)
+					var base_cost = info.get("ram_cost", 0)
+					var current_block_cost = base_cost
+					
+					# --- LÓGICA DEL IMPUESTO INCREMENTAL (+1 por movimiento previo) ---
+					if info.get("category") == "movement":
+						var tax = movement_blocks_count * 1
+						current_block_cost = base_cost + tax
+						movement_blocks_count += 1 # Registramos este bloque para el recargo del próximo
+					
+					# Acumulamos el coste calculado con impuesto
+					used_ram += current_block_cost
+					
+					# Actualizamos el texto en el nodo visual del bloque de forma reactiva
+					if child.has_method("update_visual_cost"):
+						child.update_visual_cost(current_block_cost)
+					
+					# Añadimos a la lista limpia que persistirá
+					if child.block_data:
+						new_blocks_list.append(
+							child.block_data.duplicate(true)
+						)
+					else:
+						new_blocks_list.append({
+							"type": child.block_id
+						})
 
-	# 2. ACTUALIZACIÓN VISUAL FORZADA
+	# 2. Sincronizar la verdad con los datos locales
+	current_blocks = new_blocks_list
+
+	# 3. ACTUALIZAR GAMEMANAGER AUTOMÁTICAMENTE (Usando la corrección estricta de ID)
+	var gm = get_node_or_null("/root/Main/GameManager")
+	if gm and current_piece:
+		gm.saved_programs[current_piece.piece_id] = current_blocks.duplicate(true)
+
+	# 4. ACTUALIZACIÓN VISUAL DEL CONTADOR DE LA INTERFAZ
 	if ram_counter:
-		# Buscamos los labels específicamente por nombre
 		var used_label = ram_counter.find_child("RAMUsed", true, false)
 		var total_label = ram_counter.find_child("RAMTotal", true, false)
 		
 		if used_label:
 			used_label.text = str(used_ram)
-			# Forzamos a que el Label se actualice visualmente de inmediato
-			used_label.queue_redraw() 
-			print("UI UPDATED: RAMUsed text is now ", used_label.text)
-			# Cambiar a rojo si se pasa
+			
+			# Feedback de desbordamiento de memoria
 			if used_ram > current_piece.available_ram:
 				used_label.add_theme_color_override("font_color", Color.RED)
 			else:
 				used_label.add_theme_color_override("font_color", Color.WHITE)
-				
 		if total_label:
 			total_label.text = str(current_piece.available_ram)
 
-	print("SINCRO RAM -> Bloques: ", found_blocks, " RAM: ", used_ram, "/", current_piece.available_ram)
+	print("SINCRO GLOBAL -> Bloques: ", found_blocks_count, " RAM: ", used_ram, "/", current_piece.available_ram)
+	update_piece_info()
 
 func calculate_current_ram_usage() -> int:
-	var total = 0
-	# Calculamos basándonos en la lista actual de datos
+	var total_ram = 0
+	var movement_block_count = 0 # Contador de bloques de movimiento en este script
+
 	for block_data in current_blocks:
 		if block_data.has("type"):
 			var info = BlockSystem.get_block_info(block_data["type"])
-			total += info.get("ram_cost", 0)
-	return total
+			var base_cost = info.get("ram_cost", 0)
+			
+			# Si el bloque pertenece a la categoría de movimiento
+			if info.get("category") == "movement":
+				# El coste es el base + la cantidad de movimientos previos en la cola
+				var incremental_tax = movement_block_count * 1
+				total_ram += (base_cost + incremental_tax)
+				
+				# Registramos este bloque para que el siguiente pague el impuesto
+				movement_block_count += 1
+			else:
+				# Bloques de lógica, sensores o acciones pagan tarifa plana normal
+				total_ram += base_cost
+				
+	return total_ram
 
 func update_blocks_from_workspace():
 	current_blocks.clear()
@@ -222,6 +290,7 @@ func _position_at_screen_right():
 
 func _connect_buttons():
 	# Usamos un patrón seguro para evitar múltiples conexiones
+	
 	var buttons = {
 		"TestButton": _on_test_button_pressed,
 		"SaveButton": _on_save_button_pressed,
@@ -287,7 +356,6 @@ func _initialize_interface_components():
 	update_ram_display()
 	load_block_palette()
 	load_workspace_blocks()
-	_rescale_internal_elements()
 	
 	print("Componentes inicializados")
 
@@ -340,20 +408,6 @@ func _on_resolution_changed(new_resolution: Vector2i):
 	# Reajustar elementos internos
 	call_deferred("_rescale_internal_elements")
 
-func _rescale_internal_elements():
-	print("Reescalando elementos internos...")
-	
-	# Escalar fuentes
-	_scale_fonts()
-	
-	# Escalar paneles
-	_scale_panels()
-	
-	# Escalar bloques existentes
-	_scale_existing_blocks()
-	
-	print("Elementos internos reescalados")
-
 func _scale_fonts():
 	# Buscar y escalar todos los Labels
 	var labels = _find_all_labels(self)
@@ -370,35 +424,6 @@ func _find_all_labels(node: Node) -> Array:
 	for child in node.get_children():
 		labels.append_array(_find_all_labels(child))
 	return labels
-
-func _scale_panels():
-	# Escalar paneles principales con tamaños reducidos
-	if left_panel:
-		left_panel.custom_minimum_size.x = 160 * scale_factor  # Reducido de 200
-	
-	if right_panel:
-		right_panel.custom_minimum_size.x = 120 * scale_factor  # Reducido de 150
-	
-	if workspace:
-		# Buscamos el ScrollContainer (padre del DropZone)
-		var scroll = workspace.get_parent() if workspace.get_parent() is ScrollContainer else null
-		
-		# Aumentamos el tamaño para que sea una zona de soltado cómoda
-		var target_width = 250 * scale_factor
-		var target_height = 400 * scale_factor
-		
-		if scroll:
-			scroll.custom_minimum_size = Vector2(target_width, target_height)
-			scroll.size = Vector2(target_width, target_height)
-		
-		# El DropZone (VBoxContainer) debe llenar el ancho pero ser flexible en alto
-		workspace.custom_minimum_size.x = (target_width - 20) 
-		workspace.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		# IMPORTANTE: NO fijes custom_minimum_size.y aquí para que el scroll funcione
-	
-	# Espaciado en contenedores reducido
-	if main_container is HBoxContainer:
-		main_container.add_theme_constant_override("separation", int(8 * scale_factor))
 
 func _scale_existing_blocks():
 	# Escalar bloques en la paleta
@@ -429,14 +454,15 @@ func _initialize_interface():
 		workspace = $UI/MainContainer/CenterPanel/Workspace
 		drop_zones = [workspace]
 		print("ALERTA: Usando Workspace por defecto, no se halló DropZone")
+
 func load_block_palette():
-	print("=== CARGANDO PALETA DE BLOQUES ===")
+	print("=== CARGANDO PALETA DESDE BLOCKSYSTEM ===")
 	
 	if not block_palette:
 		print("ERROR: block_palette no encontrado")
 		return
 	
-	# Obtener contenedores
+	# 1. Obtener o crear contenedores
 	var scroll_container = block_palette.get_node_or_null("ScrollContainer")
 	if not scroll_container:
 		print("ERROR: No hay ScrollContainer en block_palette")
@@ -449,84 +475,51 @@ func load_block_palette():
 		container.name = "GridContainer"
 		scroll_container.add_child(container)
 	
-	# Limpiar
+	# 2. Limpiar bloques previos
 	for child in container.get_children():
 		child.queue_free()
 	
-	# Configurar ScrollContainer
-	scroll_container.custom_minimum_size = Vector2(200 * scale_factor, 300 * scale_factor)
-	scroll_container.size = Vector2(200 * scale_factor, 300 * scale_factor)
-	
-	# Configurar GridContainer
 	container.columns = 1
 	container.add_theme_constant_override("h_separation", int(5 * scale_factor))
 	container.add_theme_constant_override("v_separation", int(10 * scale_factor))
 	
-	# Lista de bloques (mantener igual)
-	var test_blocks = [
-		{"name": "Mover Adelante", "ram_cost": 2, "category": "movement", "type": "move_forward"},
-		{"name": "Mover Diagonal", "ram_cost": 3, "category": "movement", "type": "move_diagonal"},
-		{"name": "Capturar", "ram_cost": 3, "category": "action", "type": "capture"},
-		{"name": "Si Enemigo", "ram_cost": 2, "category": "logic", "type": "if_enemy_front"},
-		{"name": "Mover Atrás", "ram_cost": 2, "category": "movement", "type": "move_back"},
-		{"name": "Movimiento L", "ram_cost": 4, "category": "movement", "type": "move_L"},
-		{"name": "Detectar Enemigo", "ram_cost": 4, "category": "sensor", "type": "detect_enemy"},
-		{"name": "Detectar Pared", "ram_cost": 2, "category": "sensor", "type": "detect_wall"},
-		{"name": "Si Aliado", "ram_cost": 2, "category": "logic", "type": "if_ally_front"},
-		{"name": "Repetir 3", "ram_cost": 5, "category": "control", "type": "loop_3"}
-	]
+	# 4. CARGA DINÁMICA DESDE EL SISTEMA
+	# Iteramos sobre las llaves definidas en block_system.gd
+	var all_block_types = BlockSystem.block_definitions.keys()
+	print("Cargando ", all_block_types.size(), " bloques desde BlockSystem")
 	
-	print("Cargando ", test_blocks.size(), " bloques")
-	
-	# Cargar cada bloque con tamaño escalado
-	for block_data in test_blocks:
+	for type_id in all_block_types:
+		# Obtenemos la información base del diccionario estático
+		var block_data = BlockSystem.get_block_info(type_id)
+		
+		# Instanciar el bloque visual
 		var block_instance = DraggableBlockScene.instantiate()
 		container.add_child(block_instance)
 		
-		# 1. Asignar ID primero
-		block_instance.block_id = block_data["type"]
-		block_instance.setup_block(block_data)
+		# Preparar datos: inyectamos el type_id para que el bloque sepa qué comando representa
+		var setup_data = block_data.duplicate()
+		setup_data["type"] = type_id 
 		
-		# 2. Configurar visualmente
+		# Configuración de lógica y datos del bloque
+		block_instance.block_id = type_id
 		if block_instance.has_method("setup_block"):
-			block_instance.setup_block(block_data)
-			var scaled_block_size = BASE_BLOCK_SIZE * scale_factor
-			block_instance.custom_minimum_size = scaled_block_size
-			block_instance.size = scaled_block_size
+			block_instance.setup_block(setup_data)
 		
-		# 3. Conectar señales (UNA SOLA VEZ)
+		# 5. Configuración visual individual y escalado
+		var scaled_block_size = BASE_BLOCK_SIZE * scale_factor
+		block_instance.custom_minimum_size = scaled_block_size
+		block_instance.size = scaled_block_size
+		block_instance.mouse_filter = Control.MOUSE_FILTER_STOP
+		
+		# 6. Conexión de señales de arrastre
 		if not block_instance.block_dragged.is_connected(_on_block_dragged):
 			block_instance.block_dragged.connect(_on_block_dragged)
 		
 		if not block_instance.block_dropped.is_connected(_on_block_dropped):
 			block_instance.block_dropped.connect(_on_block_dropped)
-			
-		block_instance.mouse_filter = Control.MOUSE_FILTER_STOP
 	
-	print("Paleta cargada: ", container.get_child_count(), " bloques")
+	print("Paleta cargada exitosamente: ", container.get_child_count(), " bloques")
 	print("=== FIN CARGA PALETA ===")
-
-func _expand_workspace_if_needed():
-	if not workspace:
-		return
-	
-	var new_height = _calculate_workspace_height()
-	
-	# Escalar límites máximos y mínimos
-	var scaled_min_height = min_workspace_height * scale_factor
-	var scaled_max_height = max_workspace_height * scale_factor
-	
-	new_height = clamp(new_height, scaled_min_height, scaled_max_height)
-	
-	if new_height != workspace.size.y:
-		workspace.custom_minimum_size.y = new_height
-		workspace.size.y = new_height
-		
-		var drop_zone = workspace.get_node_or_null("DropZone")
-		if drop_zone:
-			drop_zone.custom_minimum_size.y = new_height
-			drop_zone.size.y = new_height
-		print("Workspace auto-resized to: ", new_height, " (blocks: ", _get_workspace_block_count(), ")")
 
 func _setup_drop_zones():
 	# Limpiamos la lista para no acumular zonas fantasma
@@ -564,20 +557,6 @@ func _verify_ui_structure():
 		else:
 			print(node_name, " NOT found")
 
-func _setup_panel_sizes():
-	# Tamaños fijos - eliminar escalado
-	if main_container is HBoxContainer:
-		main_container.add_theme_constant_override("separation", 10)
-	
-	if block_palette:
-		block_palette.custom_minimum_size = Vector2(200, 300)
-		block_palette.size = Vector2(200, 300)
-	
-	if workspace:
-		workspace.custom_minimum_size = Vector2(100, min_workspace_height)
-		workspace.size = Vector2(100, min_workspace_height)
-		print("Workspace configured: ", workspace.size)
-
 func _update_scroll_container(scroll_container: ScrollContainer):
 	# Solo forzar redibujado, no configurar propiedades problemáticas
 	scroll_container.queue_redraw()
@@ -602,7 +581,6 @@ func update_piece_info():
 	var texture_rect = hbox.get_node_or_null("TextureRect")
 	if texture_rect and current_piece.texture:
 		texture_rect.texture = current_piece.texture
-		print("Piece texture updated")
 	
 	# Vbox container info
 	var vbox = hbox.get_node_or_null("VBoxContainer")
@@ -614,9 +592,16 @@ func update_piece_info():
 	var piece_type_label = vbox.get_node_or_null("PieceType") 
 	var piece_status_label = vbox.get_node_or_null("PieceStatus")
 	
+	# --- NUEVA LÓGICA DE ESTADO ---
+	var status_info = ""
+	if current_blocks.is_empty():
+		status_info = "No programs"
+	else:
+		status_info = "Installed (%d)" % current_blocks.size()
+	# ------------------------------
+	
 	var piece_name = "%s %s" % [current_piece.piece_color.capitalize(), current_piece.piece_type.capitalize()]
 	var ram_info = "Total RAM: %d" % current_piece.available_ram
-	var status_info = current_piece.get_programming_status()
 	
 	# Actualizar labels
 	if piece_name_label:
@@ -627,6 +612,11 @@ func update_piece_info():
 	
 	if piece_status_label:
 		piece_status_label.text = status_info
+		# Opcional: Cambiar color si hay programas
+		if not current_blocks.is_empty():
+			piece_status_label.add_theme_color_override("font_color", Color.GREEN_YELLOW)
+		else:
+			piece_status_label.add_theme_color_override("font_color", Color.WHITE)
 
 func _on_block_dragged(block: DraggableBlock, global_pos: Vector2):
 	print("BLOCK DRAGGED: ", block.block_data["name"])
@@ -666,21 +656,6 @@ func _get_workspace_block_count() -> int:
 			count += 1
 	return count
 
-func _calculate_workspace_height() -> int:
-	var drop_zone = workspace.get_node_or_null("DropZone")
-	if not drop_zone:
-		return min_workspace_height
-	
-	var max_y = 0
-	for child in drop_zone.get_children():
-		if child is DraggableBlock:
-			var bottom = child.position.y + child.size.y
-			if bottom > max_y:
-				max_y = bottom
-	
-	var required_height = max_y + 20  # Margen adicional
-	return clamp(required_height, min_workspace_height, max_workspace_height)
-
 func _highlight_drop_zones(highlight: bool):
 	for drop_zone in drop_zones:
 		if drop_zone is ColorRect:
@@ -713,20 +688,19 @@ func _on_test_button_pressed():
 		
 		# Cerramos primero para limpiar la UI y luego disparamos el turno
 		_close_interface()
-		gm.execute_turn_and_switch()
+		await gm.execute_turn_and_switch()
 
 func _on_save_button_pressed():
 	update_blocks_from_workspace()
 	
 	if current_piece and is_instance_valid(current_piece):
-		# 1. Guardamos en la variable de la pieza como respaldo local
 		current_piece.behavior_script = current_blocks.duplicate(true)
+		current_piece.is_programmed = not current_blocks.is_empty()
 		
-		# 2. Guardamos en el GameManager para la ejecución global
 		var gm = get_node_or_null("/root/Main/GameManager")
 		if gm:
-			gm.save_piece_program(current_piece, current_blocks)
-			print("Guardado exitoso. Bloques en memoria: ", current_blocks.size())
+			gm.saved_programs[current_piece.piece_id] = current_blocks.duplicate(true)
+			print("Guardado exitoso en GM para ", current_piece.piece_id, ". Bloques: ", current_blocks.size())
 			
 	_close_interface()
 
@@ -788,3 +762,36 @@ func _on_drop_zone_child_order_changed() -> void:
 		if is_inside_tree():
 			update_ram_display()
 			print("Detectado cambio en la jerarquía del Workspace. RAM recalculada.")
+
+#Loop button
+func _on_loop_pressed() -> void:
+	update_blocks_from_workspace()
+	if current_blocks.is_empty():
+		print("No hay bloques para guardar en loop")
+		return
+	var popup = LoopPopupScene.instantiate()
+	add_child(popup)
+	popup.popup_centered()
+	popup.loop_confirmed.connect(
+		_on_loop_name_confirmed
+	)
+
+func _on_loop_name_confirmed(loop_name: String):
+	update_blocks_from_workspace()
+	if current_blocks.is_empty():
+		print("No hay bloques para guardar en loop")
+		return
+	var loop_blocks := []
+	for block in current_blocks:
+		if block.has("type"):
+			loop_blocks.append({
+				"type": block["type"]
+			})
+	var loop_ram = calculate_current_ram_usage()
+	var loop_id = BlockSystem.create_loop_block(
+		loop_blocks,
+		loop_ram,
+		loop_name
+	)
+	print("Loop guardado: ", loop_id)
+	load_block_palette()

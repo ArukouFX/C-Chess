@@ -1,9 +1,10 @@
 extends Node
 
-# Diccionario que mapea el ID del bloque con su función de ejecución
+# Actualiza tu diccionario en game_manager.gd
 @onready var block_logic_map = {
-	"move_forward": _logic_move_forward,
-	"move_back": _logic_move_back,
+	"move_forward": func(piece): return await _execute_movement_block(piece, "move_forward"),
+	"move_back": func(piece): return await _execute_movement_block(piece, "move_back"),
+	"move_side": func(piece): return await _execute_movement_block(piece, "move_side"), # Si usas izquierda/derecha separados, añádelos aquí
 	"capture": _logic_capture
 }
 
@@ -12,6 +13,9 @@ extends Node
 @onready var board = $"../Table/Board"
 @onready var turn_display = $"../Turn/TurnDisplay"
 @onready var camera = $"../Camera/Camera2D"
+
+var game_over := false
+var winner := ""
 
 # Diccionario global para guardar programas: { "ID_PIEZA": [lista_de_bloques] }
 var saved_programs = {}
@@ -26,6 +30,7 @@ var current_programming_piece: Node = null
 var execution_timer: Timer = null
 
 # Pre-cgarge
+var GameOverScreenScene = preload("res://src/ui/game_over_screen.tscn")
 var PieceScene = preload("res://src/entities/pieces/piece.tscn")
 var ProgrammingInterfaceScene = preload("res://src/ui/interface/programming_interface.tscn")
 var piece_textures = {
@@ -94,38 +99,25 @@ func spawn_piece(type: String, board_coord: Vector2):
 	var color = type.split("_")[0]
 	var piece_type = type.split("_")[1]
 	
+	# Un solo ID consistente basado en su posición inicial
 	var unique_id = "%s_%d_%d" % [type, int(board_coord.x), int(board_coord.y)]
 	piece.piece_id = unique_id
 	
 	piece.setup_piece(piece_textures[type], color, piece_type, board_coord)
 	
-	# Cargar programa si ya existe
+	# Cargar programa desde el diccionario global si ya existe
 	if saved_programs.has(unique_id):
 		piece.behavior_script = saved_programs[unique_id].duplicate(true)
 		piece.is_programmed = true
+		print("Programa inyectado en ", unique_id, " desde el spawn (saved_programs).")
 	
-	# 1. Configuración básica de la pieza
-	piece.setup_piece(piece_textures[type], color, piece_type, board_coord)
-	
-	# 2. INYECCIÓN DE DATOS (Opción B)
-	# Obtenemos el ID único que Godot le asignó a esta instancia en memoria
-	var pid = str(piece.get_instance_id())
-	
-	# Si el GameManager ya conoce un programa para este ID (o si usas un sistema de IDs por tipo)
-	if saved_programs.has(pid):
-		piece.behavior_script = saved_programs[pid].duplicate(true)
-		piece.is_programmed = true
-		print("Programa inyectado en ", piece_type, " desde el spawn.")
-	
-	# 3. Conexión de señales
+	# Conexión de señales
 	if piece.has_signal("right_clicked"):
 		piece.right_clicked.connect(_on_piece_right_clicked)
 	
-	# 4. Posicionamiento
+	# Posicionamiento y árbol
 	var world_position = _board_to_world_position(board_coord)
 	piece.position = world_position
-	
-	# 5. Añadir al árbol (IMPORTANTE: Esto ocurre después de la inyección)
 	pieces_container.add_child(piece)
 	
 	return piece
@@ -223,40 +215,45 @@ func can_capture(attacker_color: String, defender_color: String) -> bool:
 	return attacker_color != defender_color
 
 func capture_piece(piece_to_capture):
-	print("Capturing: ", piece_to_capture.piece_type)
+	# Guardar referencia antes del queue_free
+	var captured_type = piece_to_capture.piece_type
+	var captured_color = piece_to_capture.piece_color
+	piece_to_capture.board_position = Vector2(-999, -999)
+	piece_to_capture.virtual_board_position = Vector2(-999, -999)
 	piece_to_capture.queue_free()
+	print("Pieza capturada: ", captured_color, " ", captured_type)
+	# Esperar frame para asegurar queue_free
+	await get_tree().process_frame
+	check_victory_conditions()
 
 func open_programming_interface_for_piece(piece: Node, mouse_pos: Vector2):
 	if current_programming_interface:
 		current_programming_interface.queue_free()
 
-	# 1. Asegurar que la pieza tenga un ID único si no lo tiene
-	# Usamos su posición actual en el tablero para identificarla
 	if piece.piece_id == "":
 		var pos = piece.board_position
 		piece.piece_id = "%s_%d_%d" % [piece.piece_type, int(pos.x), int(pos.y)]
 
-	# 2. Instanciar la interfaz
+	# --- SOLUCIÓN AQUÍ ---
+	current_programming_piece = piece # Guardamos qué pieza se está programando a nivel global
+	# ---------------------
+
 	var new_interface = ProgrammingInterfaceScene.instantiate()
 	new_interface.visible = false
 	
-	# 3. Añadir al CanvasLayer (para que esté por encima de todo)
 	var ui_layer = get_node_or_null("/root/Main/CanvasLayer")
 	if ui_layer:
 		ui_layer.add_child(new_interface)
 	else:
 		add_child(new_interface)
 	
-	# 4. Esperar un frame y configurar
 	await get_tree().process_frame 
 	
 	if new_interface.has_method("setup_for_piece"):
 		new_interface.setup_for_piece(piece)
-		# Forzamos actualización de RAM nada más abrir
 		if new_interface.has_method("update_ram_display"):
 			new_interface.update_ram_display()
 	
-	# 5. Mostrar y posicionar
 	new_interface.visible = true
 	current_programming_interface = new_interface
 	_position_interface_smartly(new_interface)
@@ -476,12 +473,10 @@ func _on_programming_interface_closed():
 	print("Programming interface closed from GameManager")
 	
 	if current_programming_interface and is_instance_valid(current_programming_interface):
-		# Solo limpiar la referencia, el nodo ya se eliminó
 		current_programming_interface = null
 	
+	current_programming_piece = null # <--- Limpiamos la pieza activa
 	is_opening_interface = false
-	
-	# Asegurar que todas las piezas estén en el estado correcto
 	_update_pieces_input_state()
 
 # === DEBUG UTILITIES ===
@@ -591,23 +586,28 @@ func start_programming_timer(seconds: float):
 	timer.start()
 	print("Temporizador de programación iniciado: ", seconds, " segundos")
 
-func start_execution_phase():
-	print("=== FASE DE EJECUCIÓN ===")
+func start_execution_phase(target_piece: Node = null):
+	print("=== FASE DE EJECUCIÓN SELECCIONADA ===")
 	execution_phase = true
 	programmed_moves.clear()
 	
-	# Recolectar todos los programas
-	for piece in pieces_container.get_children():
-		if piece.piece_color == current_turn and piece.is_programmed:
-			programmed_moves.append({"piece": piece, "script": piece.behavior_script})
-			print("Programa encontrado para: ", piece.piece_type)
+	if target_piece:
+		# CASO A: Solo ejecutamos la pieza que lanzamos desde la interfaz
+		if target_piece.is_programmed:
+			programmed_moves.append({"piece": target_piece, "script": target_piece.behavior_script})
+			print("Ejecutando programa específico para: ", target_piece.piece_id)
+	else:
+		# CASO B: Comportamiento antiguo (opcional, por si quieres ejecutar todo el tablero)
+		for piece in pieces_container.get_children():
+			if piece.piece_color == current_turn and piece.is_programmed:
+				programmed_moves.append({"piece": piece, "script": piece.behavior_script})
 	
 	if programmed_moves.is_empty():
-		print("No hay programas para ejecutar, pasando turno")
-		end_turn()
-	else:
-		print("Ejecutando ", programmed_moves.size(), " programas")
-		execute_programs_sequentially()
+		print("No hay programas para ejecutar o la pieza no tiene bloques")
+		execution_phase = false # No bloqueamos el juego si no hay nada que hacer
+		return 
+		
+	execute_programs_sequentially()
 
 func execute_programs_sequentially():
 	var index = 0
@@ -640,29 +640,50 @@ func _on_execute_turn_button_pressed():
 		print("Iniciando ejecución de turno...")
 		start_execution_phase()
 
-func _execute_action(piece: Node, type: String):
-	var forward = -1 if piece.piece_color == "white" else 1
-	var target = piece.board_position
-	
-	match type:
-		"move_forward": target += Vector2(0, forward)
-		"move_back":    target += Vector2(0, -forward)
-		"move_side":    target += Vector2(1, 0) # Derecha por defecto
-		"capture":      attempt_capture(piece, "front")
-		
-	if type != "capture" and is_valid_move(piece, target):
-		move_piece_to(piece, target)
+func _execute_movement_block(piece: Node, type: String):
+	var block_info = BlockSystem.get_block_info(type)
+	if block_info.is_empty() or not block_info.has("vector"):
+		return {"stop_execution": true}
 
-#execute loop
-func _execute_loop(piece: Node, action_block: Dictionary, repetitions: int):
-	print("Iniciando bucle de ", repetitions, " repeticiones")
-	for i in range(repetitions):
-		# Ejecutamos la acción. Si falla (ej. hay un obstáculo), el bucle se rompe
-		var type = action_block.get("type", "")
-		_execute_movement_block(piece, type)
+	var vec = Vector2i(block_info["vector"])
+	
+	# --- CORRECCIÓN MATEMÁTICA DE ORIENTACIÓN ---
+	# Si es blanca, invertimos tanto el eje Y (adelante/atrás) como el eje X (izquierda/derecha)
+	# para que los comandos de la UI sean relativos a la perspectiva de la pieza.
+	var multiplier = -1 if piece.piece_color == "white" else 1
+	var target_modifier = vec * multiplier
+	
+	var current_pos = Vector2i(piece.board_position)
+	var target = current_pos + target_modifier
+	
+	print("[PROCESADOR] ", piece.piece_id, " ejecuta ", type, ". Objetivo relativo calculado: ", target)
+
+	# 2. Validación y ejecución física
+	if is_valid_move(piece, target):
+		# El caballo saltará los obstáculos del camino aquí gracias a tu regla en move_piece_to
+		var hit_obstacle = await move_piece_to(piece, Vector2(target)) 
 		
-		# Opcional: Podrías añadir un pequeño await aquí si quieres ver el paso a paso
-		# await get_tree().create_timer(0.1).timeout
+		if hit_obstacle:
+			print("[SISTEMA] Movimiento interrumpido en destino.")
+			return {"stop_execution": true}
+			
+		return {"stop_execution": false}
+	else:
+		var obstacle = get_piece_at(target)
+		if obstacle:
+			print("HARDWARE ERROR: Destino final bloqueado por aliado en ", target)
+		else:
+			print("HARDWARE ERROR: Movimiento fuera de los límites del tablero en ", target)
+		return {"stop_execution": true} # Detiene el resto del programa si choca
+
+func _execute_loop(piece: Node, action_type: String, repetitions: int):
+	print("Iniciando bucle de ", repetitions, " repeticiones para ", action_type)
+	for i in range(repetitions):
+		# Ejecutamos el movimiento y esperamos a que termine
+		await _execute_movement_block(piece, action_type)
+		
+		# Pausa entre pasos del bucle
+		await get_tree().create_timer(0.1).timeout
 
 # Función para evaluar sensores
 func _check_condition(condition_type: String, piece: Node) -> bool:
@@ -680,20 +701,6 @@ func _check_condition(condition_type: String, piece: Node) -> bool:
 		"detect_wall":
 			return target_cell.y < 0 or target_cell.y > 7
 	return false
-
-# Ejecutor de movimientos específicos
-func _execute_movement_block(piece: Node, move_type: String):
-	var forward = -1 if piece.piece_color == "white" else 1
-	var target = piece.board_position
-	
-	match move_type:
-		"move_forward": target += Vector2(0, forward)
-		"move_back":    target += Vector2(0, -forward)
-		"move_diagonal": target += Vector2(1, forward) # Ejemplo simple
-		"move_L":        target += Vector2(1, 2 * forward)
-	
-	if is_valid_move(piece, target):
-		move_piece_to(piece, target)
 
 func process_command_result(piece, command):
 	print("Procesando comando: ", command.get("action"))
@@ -720,24 +727,26 @@ func process_command_result(piece, command):
 		_:
 			print("Comando desconocido: ", command.get("action"))
 
-func is_valid_move(piece: Node, target_cell: Vector2) -> bool:
-	# Verificar que la celda esté dentro del tablero
-	if target_cell.x < 0 or target_cell.x >= 8 or target_cell.y < 0 or target_cell.y >= 8:
-		print("Celda fuera del tablero")
+func is_valid_move(piece: Node, target: Vector2i) -> bool:
+	# 1. Límites del tablero
+	if target.x < 0 or target.x > 7 or target.y < 0 or target.y > 7:
 		return false
 	
-	# Verificar que no haya una pieza del mismo color en la celda objetivo
-	var target_world_pos = _board_to_world_position(target_cell)
-	var piece_at_target = get_piece_at_position(target_world_pos)
+	var target_piece = get_piece_at(target)
 	
-	if piece_at_target:
-		if piece_at_target.piece_color == piece.piece_color:
-			print("Hay una pieza aliada en la celda objetivo")
+	if target_piece:
+		# === NUEVA REGLA PARA EL CABALLO ===
+		if piece.piece_type == "horse":
+			return true
+		
+		# Reglas normales para otras piezas
+		if target_piece.piece_color == piece.piece_color:
+			print("Espacio ocupado por aliado en: ", target)
 			return false
-	
-	# Verificar movimiento básico según el tipo de pieza
-	# (Esta es una versión simplificada para el juego educativo)
-	return _is_basic_move_valid(piece, target_cell)
+		
+		return true
+		
+	return true
 
 func _is_basic_move_valid(piece: Node, target_cell: Vector2) -> bool:
 	var current_cell = piece.board_position
@@ -780,29 +789,83 @@ func _is_basic_move_valid(piece: Node, target_cell: Vector2) -> bool:
 	
 	return true  # Para pruebas, permitir cualquier movimiento
 
-func move_piece_to(piece: Node, target_cell: Vector2):
-	print("Moviendo ", piece.piece_type, " a ", target_cell)
+func move_piece_to(piece: Node, target_cell: Vector2) -> bool:
+	var target_cell_i = Vector2i(target_cell)
+	var current_cell_i = Vector2i(piece.board_position)
 	
-	# Verificar si hay una pieza en la celda objetivo para capturar
-	var target_world_pos = _board_to_world_position(target_cell)
-	var piece_at_target = get_piece_at_position(target_world_pos)
+	# 1. Fuera de límites del tablero
+	if target_cell_i.x < 0 or target_cell_i.x > 7 or target_cell_i.y < 0 or target_cell_i.y > 7:
+		print("Movimiento abortado: Fuera de límites")
+		return true # Detener ejecución del programa de la pieza
+
+	# =========================================================================
+	# 2. VALIDACIÓN DE OBSTÁCULOS EN EL CAMINO (¡EL CABALLO SE LO SALTA!)
+	# =========================================================================
+	if piece.piece_type != "horse":
+		var diff = target_cell_i - current_cell_i
+		
+		# Calculamos la dirección del paso en cada eje (-1, 0 o 1)
+		var step = Vector2i(
+			sign(diff.x),
+			sign(diff.y)
+		)
+		
+		var check_cell = current_cell_i + step
+		
+		# Avanzamos celda por celda en línea recta/diagonal ANTES del destino final
+		while check_cell != target_cell_i:
+			var obstacle = get_piece_at(check_cell)
+			if obstacle != null:
+				print("HARDWARE ERROR: ", piece.piece_type, " colisionó con ", obstacle.piece_type, " en el camino ", check_cell)
+				return true # Chocó en el trayecto, abortamos el hilo del script
+				
+			check_cell += step
+	else:
+		# Debug para confirmar que el caballo está usando su propiedad de salto
+		print("PROPIEDAD DE SALTO: El caballo ", piece.piece_id, " ignora el camino desde ", current_cell_i, " hasta ", target_cell_i)
+	# =========================================================================
+
+	# 3. Verificar el ocupante de la CASILLA FINAL (Destino)
+	var piece_at_target = get_piece_at(target_cell_i)
 	
 	if piece_at_target:
+		# Si hay una pieza enemiga -> Captura automática (también aplica al caballo al aterrizar)
 		if piece_at_target.piece_color != piece.piece_color:
-			print("Capturando pieza enemiga: ", piece_at_target.piece_type)
+			print("Capturando pieza enemiga al aterrizar: ", piece_at_target.piece_type)
 			capture_piece(piece_at_target)
+			
+			# Mover visualmente y actualizar lógica
+			piece.board_position = target_cell
+			var target_world_pos = _board_to_world_position(target_cell)
+			var tween = create_tween()
+			tween.tween_property(piece, "position", target_world_pos, 0.3)
+			
+			return true # Hubo captura, detenemos el hilo de este turno
 		else:
-			print("No se puede mover a casilla ocupada por aliado")
-			return
+			# === EXCEPCIÓN DEL CABALLO ===
+			if piece.piece_type == "horse":
+				print("Caballo aterriza sobre aliado (modo salto avanzado)")
+				
+				# OPCIÓN A: compartir casilla
+				# No hacemos nada, dejamos coexistir
+				
+				# OPCIÓN B: swap/intercambio
+				# var old_pos = piece.board_position
+				# piece_at_target.board_position = old_pos
+				
+			else:
+				print("Bloqueado: Casilla de aterrizaje ocupada por aliado.")
+				return true
 	
-	# Actualizar posición en tablero
+	# 4. Movimiento normal (casilla de destino vacía)
 	piece.board_position = target_cell
-	
-	# Animación del movimiento
+	var target_world_pos = _board_to_world_position(target_cell)
 	var tween = create_tween()
-	tween.tween_property(piece, "position", target_world_pos, 0.3)
+	# Añadimos un pequeño efecto de arco/salto visual en el Tween para que se note que salta
+	tween.set_parallel(false)
+	tween.tween_property(piece, "position", target_world_pos, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	
-	print("Movimiento completado")
+	return false # No hubo colisión en destino, puede seguir ejecutando bloques si le quedan RAM
 
 func attempt_capture(piece: Node, direction: String):
 	print("Intentando captura con ", piece.piece_type, " en dirección ", direction)
@@ -957,21 +1020,17 @@ func debug_block_system():
 	print("=== END DEBUG ===")
 
 func save_piece_program(piece: Node, blocks_array: Array) -> void:
-	if not piece or not is_instance_valid(piece):
-		print("Error GameManager: Pieza inválida al guardar")
-		return
+	if not piece or not is_instance_valid(piece): return
 
 	var piece_id = piece.piece_id
-	
-	# Usamos duplicate(true) para evitar problemas de referencia con la UI
 	saved_programs[piece_id] = blocks_array.duplicate(true)
 	
-	# Marcar la pieza para que sea incluida en la ejecución
-	piece.is_programmed = true 
+	# Sincronización idéntica de scripts de comportamiento
+	piece.behavior_script = saved_programs[piece_id].duplicate(true)
 	
-	print("--- PROGRAMA GUARDADO EN GAMEMANAGER ---")
-	print("Pieza: ", piece.piece_type, " (ID: ", piece_id, ")")
-	print("Bloques: ", saved_programs[piece_id].size())
+	piece.is_programmed = true 
+	print("Programa inyectado en la pieza: ", piece_id, " Bloques: ", piece.behavior_script.size())
+
 
 # Recupera el programa guardado para una pieza específica
 func get_piece_program(piece_id: String) -> Array:
@@ -981,22 +1040,22 @@ func get_piece_program(piece_id: String) -> Array:
 	
 	return [] # Retorna array vacío si no hay nada guardado
 
-# Funciones de logica de movimiento
-
 func _logic_move_forward(piece: Node):
 	var forward = -1 if piece.piece_color == "white" else 1
-	var target = piece.board_position + Vector2(0, forward)
+	var target = Vector2i(piece.board_position) + Vector2i(0, forward)
 	
 	if is_valid_move(piece, target):
-		move_piece_to(piece, target) # Esta función ya tiene el Tween para la animación
+		# Forzamos await aquí para que respete el flujo del turno
+		await move_piece_to(piece, Vector2(target)) 
 	else:
 		print("Movimiento adelante bloqueado para ", piece.piece_id)
 
 func _logic_move_back(piece: Node):
 	var direction = 1 if piece.piece_color == "white" else -1
-	var target = piece.board_position + Vector2(0, direction)
+	var target = Vector2i(piece.board_position) + Vector2i(0, direction)
+	
 	if is_valid_move(piece, target):
-		move_piece_to(piece, target)
+		await move_piece_to(piece, Vector2(target))
 
 func _logic_capture(piece: Node):
 	attempt_capture(piece, "front")
@@ -1041,16 +1100,89 @@ func execute_turn_and_switch():
 	end_turn()
 
 func execute_piece_program(piece: Node):
-	var pid = piece.piece_id
-	if saved_programs.has(pid):
-		var blocks = saved_programs[pid]
-		print("Ejecutando ", blocks.size(), " bloques para ", piece.piece_type)
+	print("--- Ejecutando programa de: ", piece.piece_id)
+	
+	piece.reset_execution() 
+	
+	for i in range(piece.behavior_script.size()):
+		var current_block = piece.behavior_script[i]
+		print("  Instrucción ", i, ": ", current_block.get("type", "unknown"))
 		
-		for block_data in blocks:
-			var type = block_data.get("type", "")
-			if block_logic_map.has(type):
-				print(" -> Ejecutando bloque: ", type)
-				# Ejecutamos la función guardada en el diccionario
-				block_logic_map[type].call(piece)
-			else:
-				print(" -> ERROR: No hay lógica definida para ", type)
+		# --- CORRECCIÓN: Forzamos el await para que termine la ejecución física del bloque ---
+		var result = await piece.execute_next_command()
+		
+		# Mantener el margen de seguridad para que el Tween de 0.3s termine de asentarse
+		await get_tree().create_timer(0.4).timeout
+		
+		if result is Dictionary and result.get("stop_execution", false):
+			print("Programa interrumpido por solicitud de la pieza.")
+			break
+
+func get_piece_at(board_coord: Vector2i, use_virtual := true) -> Node:
+	for piece in pieces_container.get_children():
+		var pos := Vector2i(
+			piece.virtual_board_position
+			if use_virtual
+			else piece.board_position
+		)
+		if pos == board_coord:
+			return piece
+	return null
+
+func _logic_if_cell_empty(piece: Node) -> Dictionary:
+	var forward = -1 if piece.piece_color == "white" else 1
+	var target = Vector2i(piece.board_position) + Vector2i(0, forward)
+	
+	var obstacle = get_piece_at(target)
+	if obstacle == null:
+		print("Sensor: Casilla ", target, " libre. Continuando ejecución.")
+		return {"stop_execution": false}
+	else:
+		print("Sensor: Casilla ", target, " ocupada por ", obstacle.piece_id, ". Abortando secuencia.")
+		return {"stop_execution": true}
+
+#Victoria
+
+func check_victory_conditions():
+	if game_over:
+		return
+	var white_king_exists := false
+	var black_king_exists := false
+	for piece in pieces_container.get_children():
+		if piece.piece_type == "king":
+			if piece.piece_color == "white":
+				white_king_exists = true
+			elif piece.piece_color == "black":
+				black_king_exists = true
+	# =========================
+	# RESULTADOS
+	# =========================
+	if not white_king_exists:
+		end_game("black")
+	elif not black_king_exists:
+		end_game("white")
+
+func end_game(winning_color: String):
+	if game_over:
+		return
+	game_over = true
+	winner = winning_color
+	print("======================")
+	print("GAME OVER")
+	print("Winner: ", winning_color)
+	print("======================")
+	current_turn = "none"
+	if execution_timer:
+		execution_timer.stop()
+	for piece in pieces_container.get_children():
+		if piece.has_node("Area2D"):
+			var area = piece.get_node("Area2D")
+			area.input_pickable = false
+			area.monitoring = false
+	# =========================
+	# CREAR UI GAME OVER
+	# =========================
+	var game_over_ui = GameOverScreenScene.instantiate()
+	var canvas_layer = get_node("/root/Main/CanvasLayer")
+	canvas_layer.add_child(game_over_ui)
+	game_over_ui.setup(winning_color)

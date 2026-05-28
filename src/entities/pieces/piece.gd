@@ -3,6 +3,7 @@ extends Sprite2D
 signal released(piece, world_position)
 signal right_clicked(piece)
 
+var virtual_board_position: Vector2
 var piece_id: String = ""
 var piece_type: String = ""
 var piece_color: String = ""
@@ -15,6 +16,10 @@ var behavior_script: Array = []
 var is_programmed: bool = false
 var board_position: Vector2 = Vector2.ZERO
 var program_execution_index: int = 0
+
+var is_unstable: bool = false
+
+var current_ram_usage: int = 0
 
 func _ready():
 	$Area2D.input_event.connect(_on_area_2d_input_event)
@@ -31,6 +36,7 @@ func _ready():
 	$Area2D/CollisionShape2D.position = Vector2.ZERO
 
 func setup_piece(tex: Texture2D, color: String, type: String, board_pos: Vector2) -> void:
+	virtual_board_position = board_pos
 	texture = tex
 	centered = true
 	piece_color = color
@@ -115,27 +121,57 @@ func execute_next_command():
 	if program_execution_index < behavior_script.size():
 		var block_data = behavior_script[program_execution_index]
 		
-		# Verificar que BlockSystem existe
 		if BlockSystem and BlockSystem.has_method("get_block_info"):
 			var block_info = BlockSystem.get_block_info(block_data.get("type", ""))
 			
 			if block_info and block_info.has("execute"):
-				var result = block_info["execute"].call(self, block_data.get("params", {}))
+				# PASAMOS block_data (que contiene el "type") como segundo argumento
+				var result = await block_info["execute"].call(self, block_data)
+				
+				# Si el resultado dice stop, terminamos
+				if result is Dictionary and result.get("stop_execution", false):
+					program_execution_index = behavior_script.size()
+					return result
+				
 				program_execution_index += 1
 				return result
-			else:
-				print("Block info not found for: ", block_data.get("type", ""))
-				program_execution_index += 1
-		else:
-			print("BlockSystem not available")
-			program_execution_index += 1
-	
-	return null
 
 func _on_area_2d_input_event(viewport, event, shape_idx):
 	if event is InputEventMouseButton:
-		# SOLO CLICK DERECHO para programación
-		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			print("Right click - Opening programming for: ", piece_type)
 			emit_signal("right_clicked", self)
 			get_viewport().set_input_as_handled()
+
+func capture():
+	print("Pieza ", piece_id, " capturada y removida.")
+	# Aquí podrías añadir una animación de explosión o desvanecimiento
+	queue_free()
+
+func has_more_commands() -> bool:
+	return program_execution_index < behavior_script.size() - 1
+
+#Protocolo de inestabilidad
+func check_instability() -> Dictionary:
+	var used_ram = BlockSystem.calculate_ram_usage(
+		behavior_script
+	)
+	if used_ram <= available_ram:
+		return {
+			"stable": true
+		}
+	print("PROTOCOLO DE INESTABILIDAD ACTIVADO")
+	
+	var roll = randi_range(1, 100)
+	
+	if roll <= 80:
+		print("FALLO DE EJECUCIÓN")
+		return {
+			"stable": false,
+			"result": "failure"
+		}
+	print("COLAPSO CRÍTICO")
+	return {
+		"stable": false,
+		"result": "explode"
+	}

@@ -6,6 +6,7 @@ signal block_dragged(block, global_position)
 signal block_dropped(block, global_position)
 
 var block_id: String = "move_forward" # Esto se debería asignar al instanciar el bloque
+
 func get_block_type() -> String:
 	return block_id
 
@@ -17,6 +18,8 @@ var drag_offset: Vector2 = Vector2.ZERO
 var original_position: Vector2
 var original_parent: Node
 var is_in_workspace: bool = false
+
+var is_dying: bool = false
 
 # References
 @onready var block_name_label = _find_node("BlockName")
@@ -97,20 +100,33 @@ func _input(event):
 		get_viewport().set_input_as_handled()
 
 func _start_drag(event: InputEventMouseButton):
-	# Si el bloque está en la paleta (no en el workspace)
 	if not is_in_workspace:
 		_spawn_clone_for_dragging()
-		return # Detenemos el drag del bloque original
+		return 
 
-	# Lógica normal para bloques que YA están en el workspace
+	# LOGICA PARA BLOQUES QUE YA ESTÁN EN EL WORKSPACE
 	is_dragging = true
 	drag_offset = get_global_mouse_position() - global_position
-	# ... resto de tu código original ...
+	
+	# Guardamos donde estaba por si el drag falla (opcional)
+	original_parent = get_parent() 
+	original_position = global_position
+	
+	# LIBERAR DEL CONTENEDOR: Lo movemos temporalmente a la interfaz principal
+	var interface = _find_programming_interface()
+	if interface:
+		var global_pos_actual = global_position # Guardamos la pos global antes de cambiar parent
+		get_parent().remove_child(self)
+		interface.add_child(self)
+		global_position = global_pos_actual # Restauramos la pos para que no pegue un salto
+		move_child(self, -1) # Al frente de todo
 
 func _spawn_clone_for_dragging():
 	var clone = duplicate()
 	clone.setup_block(block_data)
 	clone.block_id = block_id
+	
+	clone.is_in_workspace = false
 	
 	var interface = _find_programming_interface()
 	if interface:
@@ -134,14 +150,26 @@ func _force_start_drag():
 
 func _end_drag(event):
 	is_dragging = false
+	modulate = Color.WHITE
 	
 	var workspace_node = _find_workspace()
+	
 	if workspace_node and _is_over_workspace(workspace_node):
 		_move_to_workspace(workspace_node)
+		var interface = _find_programming_interface()
+		if interface and interface.has_method("update_ram_usage"):
+			interface.update_ram_usage()
 	else:
-		# Si el bloque es un clon recién sacado de la paleta y no cayó en el sitio
-		# lo eliminamos para no llenar la pantalla de basura
-		queue_free()
+		# --- AQUÍ CAMBIAMOS EL queue_free() POR LA ANIMACIÓN ---
+		print("Eliminando bloque con efecto...")
+		_fade_out_and_free()
+		
+		# Avisamos a la interfaz para que recalcule la RAM
+		var interface = _find_programming_interface()
+		if interface and interface.has_method("update_ram_usage"):
+			# Usamos un timer o un delay pequeño para que la RAM 
+			# se actualice cuando el bloque ya no ocupe lugar visualmente
+			interface.call_deferred("update_ram_usage")
 
 func _return_to_palette():
 	if original_parent:
@@ -214,3 +242,40 @@ func _move_to_workspace(workspace: Control):
 	z_index = 0
 	
 	print("Bloque auto-posicionado por VBoxContainer")
+
+func _fade_out_and_free():
+	if is_dying: return
+	is_dying = true 
+	
+	# Lo hacemos invisible e intocable de inmediato
+	visible = false 
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	var interface = _find_programming_interface()
+	
+	var tween = create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(self, "modulate:a", 0.0, 0.15)
+	tween.tween_property(self, "scale", Vector2.ZERO, 0.15)
+	
+	tween.set_parallel(false)
+	tween.finished.connect(func():
+		queue_free()
+		# Forzamos a la interfaz a que limpie la lista y avise al GameManager
+		if interface and interface.has_method("update_ram_display"):
+			interface.update_ram_display()
+	)
+
+# En draggable_block.gd
+
+func update_visual_cost(current_real_cost: int):
+	if ram_cost_label:
+		ram_cost_label.text = "RAM: " + str(current_real_cost)
+		
+		# Opcional: Si el bloque cuesta más de su valor base debido al impuesto, 
+		# podemos teñir el texto de amarillo/naranja para dar feedback visual de la penalización
+		var base_cost = block_data.get("ram_cost", 0)
+		if current_real_cost > base_cost:
+			ram_cost_label.add_theme_color_override("font_color", Color.GOLD)
+		else:
+			ram_cost_label.add_theme_color_override("font_color", Color.WHITE)

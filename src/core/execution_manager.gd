@@ -30,22 +30,7 @@ func _execute_next():
 	var piece = move_data["piece"]
 	var command = move_data["command"]
 	
-	_process_command(piece, command)
 	
 	# Esperar y ejecutar siguiente
 	await get_tree().create_timer(0.5).timeout
 	_execute_next()
-
-func _process_command(piece: Node, command: Dictionary):
-	match command.get("action"):
-		"move":
-			var from_pos = piece.board_position
-			var to_pos = command["target"]
-			piece.board_position = to_pos
-			
-			# Animación
-			var tween = create_tween()
-			tween.tween_property(piece, "position", 
-				board.get_nearest_cell_pos(board_position_to_world(to_pos)), 0.3)
-			
-			emit_signal("move_executed", piece, from_pos, to_pos)
