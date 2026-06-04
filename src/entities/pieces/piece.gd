@@ -9,6 +9,11 @@ var piece_type: String = ""
 var piece_color: String = ""
 var original_modulate: Color = Color.WHITE
 
+#Defensa
+# Protocolo defensivo
+var defense_protocol = null
+var defense_protocol_used = false
+
 # Sistema de programación
 var available_ram: int = 0
 var used_ram: int = 0
@@ -20,6 +25,11 @@ var program_execution_index: int = 0
 var is_unstable: bool = false
 
 var current_ram_usage: int = 0
+
+#defense
+var defense_protocol_id := ""
+var defense_protocol_active := false
+var defense_protocol_owner_turn := ""
 
 func _ready():
 	$Area2D.input_event.connect(_on_area_2d_input_event)
@@ -175,3 +185,23 @@ func check_instability() -> Dictionary:
 		"stable": false,
 		"result": "explode"
 	}
+
+# Funciones de defensa
+func install_defense_protocol(protocol_type: String):
+	defense_protocol = {
+		"type": protocol_type
+	}
+	print("Protocolo instalado:", protocol_type)
+
+func has_defense_protocol() -> bool:
+	return defense_protocol != null
+
+func activate_defense_protocol() -> bool:
+	if defense_protocol_used:
+		return false
+	defense_protocol_used = true
+	print("DEFENSE PROTOCOL ACTIVATED: ", piece_id)
+	return true
+
+func get_defense_protocol():
+	return defense_protocol

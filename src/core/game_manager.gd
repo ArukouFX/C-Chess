@@ -17,7 +17,7 @@ extends Node
 var game_over := false
 var winner := ""
 
-# Diccionario global para guardar programas: { "ID_PIEZA": [lista_de_bloques] }
+# Diccionario global para guardar programas
 var saved_programs = {}
 
 var current_programming_interface: Node = null
@@ -120,6 +120,9 @@ func spawn_piece(type: String, board_coord: Vector2):
 	piece.position = world_position
 	pieces_container.add_child(piece)
 	
+	if piece.piece_id == "white_pawn_3_6":
+		piece.install_defense_protocol("escape_back")
+	
 	return piece
 
 # Asegurar que _board_to_world_position use la función del board:
@@ -215,14 +218,27 @@ func can_capture(attacker_color: String, defender_color: String) -> bool:
 	return attacker_color != defender_color
 
 func capture_piece(piece_to_capture):
-	# Guardar referencia antes del queue_free
+	if piece_to_capture.defense_protocol_active:
+		print("DEFENSE PROTOCOL ACTIVATED:",piece_to_capture.piece_id)
+		print("Captura cancelada por protocolo defensivo")
+		await execute_defense_protocol(
+			piece_to_capture
+		)
+		return
+	# captura normal
 	var captured_type = piece_to_capture.piece_type
 	var captured_color = piece_to_capture.piece_color
 	piece_to_capture.board_position = Vector2(-999, -999)
 	piece_to_capture.virtual_board_position = Vector2(-999, -999)
 	piece_to_capture.queue_free()
-	print("Pieza capturada: ", captured_color, " ", captured_type)
-	# Esperar frame para asegurar queue_free
+	print(
+		"Pieza capturada: ",
+		captured_color,
+		" ",
+		captured_type,
+		", id:",
+		piece_to_capture.piece_id
+	)
 	await get_tree().process_frame
 	check_victory_conditions()
 
@@ -792,26 +808,19 @@ func _is_basic_move_valid(piece: Node, target_cell: Vector2) -> bool:
 func move_piece_to(piece: Node, target_cell: Vector2) -> bool:
 	var target_cell_i = Vector2i(target_cell)
 	var current_cell_i = Vector2i(piece.board_position)
-	
 	# 1. Fuera de límites del tablero
 	if target_cell_i.x < 0 or target_cell_i.x > 7 or target_cell_i.y < 0 or target_cell_i.y > 7:
 		print("Movimiento abortado: Fuera de límites")
 		return true # Detener ejecución del programa de la pieza
-
-	# =========================================================================
-	# 2. VALIDACIÓN DE OBSTÁCULOS EN EL CAMINO (¡EL CABALLO SE LO SALTA!)
-	# =========================================================================
+	# 2. VALIDACIÓN DE OBSTÁCULOS EN EL CAMINO EL CABALLO SE LO SALTA
 	if piece.piece_type != "horse":
 		var diff = target_cell_i - current_cell_i
-		
 		# Calculamos la dirección del paso en cada eje (-1, 0 o 1)
 		var step = Vector2i(
 			sign(diff.x),
 			sign(diff.y)
 		)
-		
 		var check_cell = current_cell_i + step
-		
 		# Avanzamos celda por celda en línea recta/diagonal ANTES del destino final
 		while check_cell != target_cell_i:
 			var obstacle = get_piece_at(check_cell)
@@ -823,36 +832,24 @@ func move_piece_to(piece: Node, target_cell: Vector2) -> bool:
 	else:
 		# Debug para confirmar que el caballo está usando su propiedad de salto
 		print("PROPIEDAD DE SALTO: El caballo ", piece.piece_id, " ignora el camino desde ", current_cell_i, " hasta ", target_cell_i)
-	# =========================================================================
 
 	# 3. Verificar el ocupante de la CASILLA FINAL (Destino)
 	var piece_at_target = get_piece_at(target_cell_i)
-	
 	if piece_at_target:
 		# Si hay una pieza enemiga -> Captura automática (también aplica al caballo al aterrizar)
 		if piece_at_target.piece_color != piece.piece_color:
 			print("Capturando pieza enemiga al aterrizar: ", piece_at_target.piece_type)
 			capture_piece(piece_at_target)
-			
 			# Mover visualmente y actualizar lógica
 			piece.board_position = target_cell
 			var target_world_pos = _board_to_world_position(target_cell)
 			var tween = create_tween()
 			tween.tween_property(piece, "position", target_world_pos, 0.3)
-			
 			return true # Hubo captura, detenemos el hilo de este turno
 		else:
 			# === EXCEPCIÓN DEL CABALLO ===
 			if piece.piece_type == "horse":
 				print("Caballo aterriza sobre aliado (modo salto avanzado)")
-				
-				# OPCIÓN A: compartir casilla
-				# No hacemos nada, dejamos coexistir
-				
-				# OPCIÓN B: swap/intercambio
-				# var old_pos = piece.board_position
-				# piece_at_target.board_position = old_pos
-				
 			else:
 				print("Bloqueado: Casilla de aterrizaje ocupada por aliado.")
 				return true
@@ -864,8 +861,7 @@ func move_piece_to(piece: Node, target_cell: Vector2) -> bool:
 	# Añadimos un pequeño efecto de arco/salto visual en el Tween para que se note que salta
 	tween.set_parallel(false)
 	tween.tween_property(piece, "position", target_world_pos, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	
-	return false # No hubo colisión en destino, puede seguir ejecutando bloques si le quedan RAM
+	return false
 
 func attempt_capture(piece: Node, direction: String):
 	print("Intentando captura con ", piece.piece_type, " en dirección ", direction)
@@ -1020,17 +1016,31 @@ func debug_block_system():
 	print("=== END DEBUG ===")
 
 func save_piece_program(piece: Node, blocks_array: Array) -> void:
-	if not piece or not is_instance_valid(piece): return
-
-	var piece_id = piece.piece_id
-	saved_programs[piece_id] = blocks_array.duplicate(true)
-	
-	# Sincronización idéntica de scripts de comportamiento
-	piece.behavior_script = saved_programs[piece_id].duplicate(true)
-	
-	piece.is_programmed = true 
-	print("Programa inyectado en la pieza: ", piece_id, " Bloques: ", piece.behavior_script.size())
-
+	if not piece or not is_instance_valid(piece):
+		return
+	var behavior_blocks := []
+	var defense_protocol: Variant = null
+	for block in blocks_array:
+		var block_type = block.get("type", "")
+		var info = BlockSystem.get_block_info(block_type)
+		match info.get("category", ""):
+			"action":
+				defense_protocol = block.duplicate(true)
+			_:
+				behavior_blocks.append(
+					block.duplicate(true)
+				)
+	piece.behavior_script = behavior_blocks
+	piece.defense_protocol = defense_protocol
+	saved_programs[piece.piece_id] = {
+		"behavior": behavior_blocks.duplicate(true),
+		"defense": defense_protocol
+	}
+	piece.is_programmed = (
+		not behavior_blocks.is_empty()
+		or defense_protocol != null
+	)
+	print("Programa guardado: ", piece.piece_id, " Movimientos:", behavior_blocks.size(), " Defensa:", defense_protocol != null)
 
 # Recupera el programa guardado para una pieza específica
 func get_piece_program(piece_id: String) -> Array:
@@ -1101,22 +1111,22 @@ func execute_turn_and_switch():
 
 func execute_piece_program(piece: Node):
 	print("--- Ejecutando programa de: ", piece.piece_id)
-	
-	piece.reset_execution() 
-	
+	piece.reset_execution()
 	for i in range(piece.behavior_script.size()):
 		var current_block = piece.behavior_script[i]
+		var info = BlockSystem.get_block_info(
+			current_block.get("type", "")
+		)
+		# Los protocolos defensivos NO se ejecutan
+		if info.get("category") == "action":
+			continue
 		print("  Instrucción ", i, ": ", current_block.get("type", "unknown"))
-		
-		# --- CORRECCIÓN: Forzamos el await para que termine la ejecución física del bloque ---
 		var result = await piece.execute_next_command()
-		
-		# Mantener el margen de seguridad para que el Tween de 0.3s termine de asentarse
 		await get_tree().create_timer(0.4).timeout
-		
 		if result is Dictionary and result.get("stop_execution", false):
 			print("Programa interrumpido por solicitud de la pieza.")
 			break
+	print("DEFENSE:", piece.defense_protocol)
 
 func get_piece_at(board_coord: Vector2i, use_virtual := true) -> Node:
 	for piece in pieces_container.get_children():
@@ -1179,10 +1189,31 @@ func end_game(winning_color: String):
 			var area = piece.get_node("Area2D")
 			area.input_pickable = false
 			area.monitoring = false
-	# =========================
 	# CREAR UI GAME OVER
-	# =========================
 	var game_over_ui = GameOverScreenScene.instantiate()
 	var canvas_layer = get_node("/root/Main/CanvasLayer")
 	canvas_layer.add_child(game_over_ui)
 	game_over_ui.setup(winning_color)
+
+#Defensa
+func execute_defense_protocol(piece):
+	if piece.defense_protocol == null:
+		capture_piece(piece)
+		return
+	var protocol_type = piece.defense_protocol.get(
+		"type",
+		""
+	)
+	if protocol_type.is_empty():
+		capture_piece(piece)
+		return
+	var protocol_data = BlockSystem.get_block_info(
+		protocol_type
+	)
+	if protocol_data.is_empty():
+		capture_piece(piece)
+		return
+	await BlockSystem.execute_escape_protocol(
+		piece,
+		protocol_data
+	)

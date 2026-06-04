@@ -159,8 +159,14 @@ layout_mode = 2
 theme_override_fonts/font = ExtResource("1_x7mol")
 text = "Loop"
 
+[node name="Escape" type="Button" parent="UI/MainContainer/CenterPanel"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("1_x7mol")
+text = "Escape"
+
 [node name="RightPanel" type="VBoxContainer" parent="UI/MainContainer"]
 layout_mode = 2
 
 [connection signal="child_order_changed" from="UI/MainContainer/CenterPanel/Workspace/ScrollContainer/DropZone" to="." method="_on_drop_zone_child_order_changed"]
 [connection signal="pressed" from="UI/MainContainer/CenterPanel/Loop" to="." method="_on_loop_pressed"]
+[connection signal="pressed" from="UI/MainContainer/CenterPanel/Escape" to="." method="_on_escape_pressed"]

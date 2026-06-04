@@ -18,6 +18,7 @@ static var block_definitions = {
 static var custom_loops := {}
 static var loop_counter := 0
 
+#Creacion de loop
 static func create_loop_block(blocks: Array, ram_cost: int, loop_name: String) -> String:
 	loop_counter += 1
 	var loop_id = "loop%d" % loop_counter
@@ -64,6 +65,44 @@ static func execute_block(piece, block_data):
 			runtime_data[k] = block_data[k]
 		return await execute_func.call(piece, runtime_data)
 	return null
+
+#Escape system
+static var custom_escapes := {}
+static var escape_counter := 0
+
+static func create_escape_protocol(
+	blocks: Array,
+	ram_cost: int,
+	protocol_name: String
+) -> String:
+	escape_counter += 1
+	var protocol_id = "escape%d" % escape_counter
+	block_definitions[protocol_id] = {
+		"name": protocol_name,
+		"type": protocol_id,
+		"category": "action",
+		"ram_cost": ram_cost,
+		"color": Color.ORANGE,
+		"contained_blocks": blocks.duplicate(true),
+		"execute": execute_escape_protocol
+	}
+	return protocol_id
+
+static func execute_escape_protocol(piece, block_data):
+	var blocks = block_data.get(
+		"contained_blocks",
+		[]
+	)
+	for block in blocks:
+		var result = await execute_block(
+			piece,
+			block
+		)
+		if result == null:
+			return null
+	return {
+		"action":"escape_complete"
+	}
 
 # Función genérica para ejecutar cualquier movimiento basado en su vector
 static func execute_movement(piece, block_id):
@@ -153,216 +192,129 @@ static func check_enemy_front(piece, params = {}):
 	return {"action": "condition", "check": "enemy_front", "result": true}
 
 static func move_generic(piece, params = {}):
-
 	var block_id = params.get("type", "")
 	var info = block_definitions.get(block_id, {})
-
 	if info.is_empty():
 		print("Error: BlockSystem no reconoce el tipo: ", block_id)
 		return {"action":"error","stop_execution":true}
-
 	var vec = info.get("vector", Vector2i.ZERO)
-
-	# ==========================================
 	# USAR SIEMPRE POSICIÓN VIRTUAL
-	# ==========================================
-
 	var side_multiplier = -1 if piece.piece_color == "white" else 1
-
 	var target_board_pos = (
 		piece.virtual_board_position +
 		Vector2(vec.x, vec.y * side_multiplier)
 	)
-
-	# ==========================================
 	# LÍMITES
-	# ==========================================
-
 	if target_board_pos.x < 0 or target_board_pos.x > 7 \
 	or target_board_pos.y < 0 or target_board_pos.y > 7:
-
 		print("Fuera de límites: ", target_board_pos)
-
 		return {
 			"action":"out_of_bounds",
 			"stop_execution":true
 		}
-
 	var gm = piece.get_node_or_null("/root/Main/GameManager")
-
 	if not gm:
 		return {"action":"error","stop_execution":true}
-
-	# ==========================================
 	# COLISIONES
-	# ==========================================
-
 	var collider = gm.get_piece_at(Vector2i(target_board_pos))
-
-	# =========================================================
 	# SI HAY PIEZA
-	# =========================================================
-
 	if collider:
-
-		# ======================================
 		# ENEMIGO
-		# ======================================
-
 		if collider.piece_color != piece.piece_color:
-
 			print("Captura en ", target_board_pos)
-
 			gm.capture_piece(collider)
-
 			var world_pos = gm._board_to_world_position(target_board_pos)
-
 			var tween = piece.create_tween()
-
 			tween.tween_property(
 				piece,
 				"position",
 				world_pos,
 				0.20
 			)
-
 			await tween.finished
-
 			# SOLO virtual
 			piece.virtual_board_position = target_board_pos
-
 			return {
 				"action":"capture",
 				"stop_execution":true
 			}
-
-		# ======================================
 		# ALIADO
-		# ======================================
-
 		else:
-
-			# ==================================
 			# CABALLO
-			# ==================================
-
 			if piece.piece_type == "horse":
-
 				var can_phase = piece.has_more_commands()
-
-				# ==================================
 				# ÚLTIMO MOVIMIENTO
-				# ==================================
-
 				if not can_phase:
-
 					print("HORSE FINAL POSITION BLOCKED")
-
 					# IMPORTANTE:
 					# rollback visual
-
 					var rollback_world = gm._board_to_world_position(
 						piece.board_position
 					)
-
 					piece.position = rollback_world
 					piece.virtual_board_position = piece.board_position
-
 					return {
 						"action":"blocked",
 						"stop_execution":true
 					}
-
 				# ==================================
 				# PHASE PASS
 				# ==================================
-
 				print("HORSE PHASE PASS -> ", target_board_pos)
-
 				var ally_original_world = collider.position
-
 				var offset_dir = Vector2(20,0)
-
 				if randi() % 2 == 0:
 					offset_dir = Vector2(-20,0)
-
 				var tween = piece.create_tween()
-
 				tween.set_parallel(true)
-
 				tween.tween_property(
 					collider,
 					"position",
 					ally_original_world + offset_dir,
 					0.10
 				)
-
 				var horse_world = gm._board_to_world_position(
 					target_board_pos
 				)
-
 				tween.tween_property(
 					piece,
 					"position",
 					horse_world,
 					0.20
 				)
-
 				await tween.finished
-
-				# ==================================
 				# SOLO VIRTUAL
-				# ==================================
-
 				piece.virtual_board_position = target_board_pos
-
 				var return_tween = piece.create_tween()
-
 				return_tween.tween_property(
 					collider,
 					"position",
 					ally_original_world,
 					0.10
 				)
-
 				await return_tween.finished
-
 				return {
 					"action":"horse_pass",
 					"stop_execution":false
 				}
-
-			# ==================================
 			# OTRAS PIEZAS BLOQUEADAS
-			# ==================================
-
 			print("Bloqueado por aliado")
-
 			return {
 				"action":"blocked",
 				"stop_execution":true
 			}
-
-	# =========================================================
 	# CASILLA VACÍA
-	# =========================================================
-
 	var world_pos = gm._board_to_world_position(target_board_pos)
-
 	var tween = piece.create_tween()
-
 	tween.tween_property(
 		piece,
 		"position",
 		world_pos,
 		0.20
 	)
-
 	await tween.finished
-
 	# SOLO virtual
 	piece.virtual_board_position = target_board_pos
-
 	return {
 		"action":"move",
 		"stop_execution":false

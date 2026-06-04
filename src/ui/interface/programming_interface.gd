@@ -3,6 +3,7 @@ extends Control
 class_name ProgrammingInterface
 
 var LoopPopupScene = preload("res://src/ui/interface/loop_name_popup.tscn")
+var EscapePopupScene = preload("res://src/ui/interface/escape_name_popup.tscn")
 
 # Referencias
 @onready var main_container = $UI/MainContainer
@@ -16,6 +17,7 @@ var LoopPopupScene = preload("res://src/ui/interface/loop_name_popup.tscn")
 @onready var ram_counter = $UI/MainContainer/RightPanel/RAMCounter
 @onready var control_buttons = $UI/MainContainer/LeftPanel/ControlButtons
 @onready var loop_button = $UI/MainContainer/CenterPanel/Loop
+@onready var escape_button = $UI/MainContainer/CenterPanel/Escape
 
 # Tamaños y Constantes
 const BASE_SIZE = Vector2(600, 450)
@@ -183,7 +185,7 @@ func update_ram_display():
 					var current_block_cost = base_cost
 					
 					# --- LÓGICA DEL IMPUESTO INCREMENTAL (+1 por movimiento previo) ---
-					if info.get("category") == "movement":
+					if info.get("category") == "movement" || "logic":
 						var tax = movement_blocks_count * 1
 						current_block_cost = base_cost + tax
 						movement_blocks_count += 1 # Registramos este bloque para el recargo del próximo
@@ -686,13 +688,12 @@ func _on_test_button_pressed():
 		gm.save_piece_program(current_piece, current_blocks)
 		print("Ejecutando programa para: ", current_piece.piece_type)
 		
-		# Cerramos primero para limpiar la UI y luego disparamos el turno
+		install_defense_protocol()
 		_close_interface()
 		await gm.execute_turn_and_switch()
 
 func _on_save_button_pressed():
 	update_blocks_from_workspace()
-	
 	if current_piece and is_instance_valid(current_piece):
 		current_piece.behavior_script = current_blocks.duplicate(true)
 		current_piece.is_programmed = not current_blocks.is_empty()
@@ -702,6 +703,7 @@ func _on_save_button_pressed():
 			gm.saved_programs[current_piece.piece_id] = current_blocks.duplicate(true)
 			print("Guardado exitoso en GM para ", current_piece.piece_id, ". Bloques: ", current_blocks.size())
 			
+	install_defense_protocol()
 	_close_interface()
 
 func _on_cancel_button_pressed():
@@ -795,3 +797,50 @@ func _on_loop_name_confirmed(loop_name: String):
 	)
 	print("Loop guardado: ", loop_id)
 	load_block_palette()
+
+func _on_escape_pressed() -> void:
+	update_blocks_from_workspace()
+	if current_blocks.is_empty():
+		print("No hay bloques para guardar en escape")
+		return
+	var popup = EscapePopupScene.instantiate()
+	add_child(popup)
+	popup.popup_centered()
+	popup.escape_confirmed.connect(
+		_on_escape_name_confirmed
+	)
+
+func _on_escape_name_confirmed(name:String):
+	update_blocks_from_workspace()
+
+	var escape_blocks := []
+
+	for block in current_blocks:
+		escape_blocks.append(
+			block.duplicate(true)
+		)
+
+	var ram_cost = calculate_current_ram_usage() * 2
+	var protocol_id = BlockSystem.create_escape_protocol(
+		escape_blocks,
+		ram_cost,
+		name
+	)
+	print("Protocolo creado:", protocol_id)
+	load_block_palette()
+
+func install_defense_protocol():
+	for block in current_blocks:
+
+		var info = BlockSystem.get_block_info(
+			block.get("type", "")
+		)
+		if info.get("category") == "action":
+			current_piece.defense_protocol_id = block["type"]
+			current_piece.defense_protocol_active = true
+			current_piece.defense_protocol_owner_turn = current_piece.piece_color
+			print(
+				"Defense protocol instalado:",
+				block["type"]
+			)
+			return

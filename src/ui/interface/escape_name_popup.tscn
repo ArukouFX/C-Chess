@@ -1,6 +1,6 @@
-[gd_scene load_steps=2 format=3 uid="uid://bekfv22as2asf"]
+[gd_scene load_steps=2 format=3 uid="uid://0mhrxlikelce"]
 
-[ext_resource type="Script" uid="uid://c2jfwmcgfwk6r" path="res://src/ui/interface/loop_name_popup.gd" id="1_jbvw1"]
+[ext_resource type="Script" uid="uid://ul4hqwo5chai" path="res://src/ui/interface/escape_name_popup.gd" id="1_nt3dt"]
 
 [node name="Window" type="Window"]
 initial_position = 1
@@ -8,7 +8,7 @@ size = Vector2i(500, 150)
 transient_to_focused = true
 exclusive = true
 unresizable = true
-script = ExtResource("1_jbvw1")
+script = ExtResource("1_nt3dt")
 
 [node name="HBoxContainer2" type="VBoxContainer" parent="."]
 offset_right = 430.0
@@ -20,7 +20,7 @@ layout_mode = 2
 [node name="Label" type="Label" parent="HBoxContainer2/VBoxContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 30
-text = "Nombre del Loop:"
+text = "Nombre del Escape:"
 
 [node name="LineEdit" type="LineEdit" parent="HBoxContainer2/VBoxContainer"]
 layout_mode = 2
