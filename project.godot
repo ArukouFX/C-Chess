@@ -17,6 +17,7 @@ boot_splash/bg_color=Color(0, 0, 0, 1)
 boot_splash/fullsize=false
 boot_splash/image="uid://ha0fpg2tfnxx"
 config/icon="uid://ckqd612jfq1tm"
+config/windows_native_icon="res://black-king.ico"
 boot_splash/minimum_display_time=2000
 
 [autoload]

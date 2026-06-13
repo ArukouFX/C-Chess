@@ -15,13 +15,12 @@ var EscapePopupScene = preload("res://src/ui/interface/escape_name_popup.tscn")
 
 @onready var piece_info = $UI/MainContainer/LeftPanel/PieceInfo
 @onready var ram_counter = $UI/MainContainer/RightPanel/RAMCounter
-@onready var control_buttons = $UI/MainContainer/LeftPanel/ControlButtons
+@onready var control_buttons = $UI/MainContainer/CenterPanel/ControlButtons
 @onready var loop_button = $UI/MainContainer/CenterPanel/Loop
 @onready var escape_button = $UI/MainContainer/CenterPanel/Escape
 
 # Tamaños y Constantes
 const BASE_SIZE = Vector2(600, 450)
-const BASE_BLOCK_SIZE = Vector2(160, 50)
 const BASE_FONT_SIZE = 14
 var min_workspace_height: int = 100
 
@@ -141,7 +140,6 @@ func load_workspace_blocks():
 		workspace.add_child(block_instance)
 		block_instance.is_in_workspace = true
 		# Setup visual
-		block_instance.custom_minimum_size = BASE_BLOCK_SIZE * scale_factor
 		block_instance.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		# Recuperar info completa del sistema de bloques
 		var full_info = BlockSystem.get_block_info(data["type"])
@@ -327,7 +325,6 @@ func _move_block_to_target(block: DraggableBlock, target: Control, _pos: Vector2
 	target.add_child(block)
 	
 	# Forzamos que se vea bien en el VBoxContainer
-	block.custom_minimum_size = BASE_BLOCK_SIZE * scale_factor
 	block.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 func _initialize_interface_components():
@@ -433,7 +430,6 @@ func _scale_existing_blocks():
 	if palette_container:
 		for child in palette_container.get_children():
 			if child is DraggableBlock:
-				child.custom_minimum_size = BASE_BLOCK_SIZE * scale_factor
 				child.size = child.custom_minimum_size
 	
 	# Escalar bloques en el workspace
@@ -441,7 +437,6 @@ func _scale_existing_blocks():
 	if workspace_drop:
 		for child in workspace_drop.get_children():
 			if child is DraggableBlock:
-				child.custom_minimum_size = BASE_BLOCK_SIZE * scale_factor
 				child.size = child.custom_minimum_size
 
 func _initialize_interface():
@@ -458,69 +453,62 @@ func _initialize_interface():
 		print("ALERTA: Usando Workspace por defecto, no se halló DropZone")
 
 func load_block_palette():
-	print("=== CARGANDO PALETA DESDE BLOCKSYSTEM ===")
-	
+	print("=== CARGANDO PALETA FILTRADA DESDE BLOCKSYSTEM ===")
 	if not block_palette:
 		print("ERROR: block_palette no encontrado")
 		return
-	
+	if not current_piece:
+		print("ERROR: No hay una pieza asignada para determinar el color de la paleta")
+		return
 	# 1. Obtener o crear contenedores
 	var scroll_container = block_palette.get_node_or_null("ScrollContainer")
 	if not scroll_container:
 		print("ERROR: No hay ScrollContainer en block_palette")
 		return
-	
 	var container = scroll_container.get_node_or_null("GridContainer")
 	if not container:
 		print("Creando GridContainer...")
 		container = GridContainer.new()
 		container.name = "GridContainer"
 		scroll_container.add_child(container)
-	
 	# 2. Limpiar bloques previos
 	for child in container.get_children():
 		child.queue_free()
-	
 	container.columns = 1
 	container.add_theme_constant_override("h_separation", int(5 * scale_factor))
 	container.add_theme_constant_override("v_separation", int(10 * scale_factor))
-	
-	# 4. CARGA DINÁMICA DESDE EL SISTEMA
-	# Iteramos sobre las llaves definidas en block_system.gd
-	var all_block_types = BlockSystem.block_definitions.keys()
-	print("Cargando ", all_block_types.size(), " bloques desde BlockSystem")
-	
-	for type_id in all_block_types:
-		# Obtenemos la información base del diccionario estático
-		var block_data = BlockSystem.get_block_info(type_id)
-		
+	# 3. CARGA DINÁMICA FILTRADA POR COLOR DE LA PIEZA
+	# Obtenemos los bloques correspondientes divididos por categorías lúdicas
+	var color_bando = current_piece.piece_color
+	var movement_blocks = BlockSystem.get_blocks_for_palette("movement", color_bando)
+	var logic_blocks = BlockSystem.get_blocks_for_palette("logic", color_bando)
+	var action_blocks = BlockSystem.get_blocks_for_palette("action", color_bando)
+	# Consolidamos toda la lista que es apta para este jugador
+	var allowed_blocks = []
+	allowed_blocks.append_array(movement_blocks)
+	allowed_blocks.append_array(logic_blocks)
+	allowed_blocks.append_array(action_blocks)
+	print("Cargando ", allowed_blocks.size(), " bloques aptos para el bando: ", color_bando)
+	for block_data in allowed_blocks:
+		var type_id = block_data.get("type", "")
+		if type_id == "": continue
 		# Instanciar el bloque visual
 		var block_instance = DraggableBlockScene.instantiate()
 		container.add_child(block_instance)
-		
-		# Preparar datos: inyectamos el type_id para que el bloque sepa qué comando representa
-		var setup_data = block_data.duplicate()
-		setup_data["type"] = type_id 
-		
-		# Configuración de lógica y datos del bloque
+		# Preparar datos
+		var setup_data = block_data.duplicate(true)
+		# Configuración de lógica y datos del bloque visual
 		block_instance.block_id = type_id
 		if block_instance.has_method("setup_block"):
 			block_instance.setup_block(setup_data)
-		
-		# 5. Configuración visual individual y escalado
-		var scaled_block_size = BASE_BLOCK_SIZE * scale_factor
-		block_instance.custom_minimum_size = scaled_block_size
-		block_instance.size = scaled_block_size
+		# Configuración visual individual y escalado
 		block_instance.mouse_filter = Control.MOUSE_FILTER_STOP
-		
-		# 6. Conexión de señales de arrastre
+		# Conexión de señales de arrastre
 		if not block_instance.block_dragged.is_connected(_on_block_dragged):
 			block_instance.block_dragged.connect(_on_block_dragged)
-		
 		if not block_instance.block_dropped.is_connected(_on_block_dropped):
 			block_instance.block_dropped.connect(_on_block_dropped)
-	
-	print("Paleta cargada exitosamente: ", container.get_child_count(), " bloques")
+	print("Paleta cargada exitosamente para bando [", color_bando, "]: ", container.get_child_count(), " bloques")
 	print("=== FIN CARGA PALETA ===")
 
 func _setup_drop_zones():
@@ -780,8 +768,8 @@ func _on_loop_pressed() -> void:
 
 func _on_loop_name_confirmed(loop_name: String):
 	update_blocks_from_workspace()
-	if current_blocks.is_empty():
-		print("No hay bloques para guardar en loop")
+	if current_blocks.is_empty() or not current_piece:
+		print("No hay bloques o pieza para guardar en loop")
 		return
 	var loop_blocks := []
 	for block in current_blocks:
@@ -790,12 +778,36 @@ func _on_loop_name_confirmed(loop_name: String):
 				"type": block["type"]
 			})
 	var loop_ram = calculate_current_ram_usage()
+	
+	# CORRECCIÓN: Pasamos el color de la pieza como cuarto argumento
 	var loop_id = BlockSystem.create_loop_block(
 		loop_blocks,
 		loop_ram,
-		loop_name
+		loop_name,
+		current_piece.piece_color
 	)
-	print("Loop guardado: ", loop_id)
+	print("Loop guardado de forma aislada: ", loop_id)
+	load_block_palette()
+
+func _on_escape_name_confirmed(name: String):
+	update_blocks_from_workspace()
+	if current_blocks.is_empty() or not current_piece:
+		print("No hay bloques o pieza para guardar en escape")
+		return
+	var escape_blocks := []
+	for block in current_blocks:
+		escape_blocks.append(
+			block.duplicate(true)
+		)
+	var ram_cost = calculate_current_ram_usage() * 2
+	# CORRECCIÓN: Pasamos el color de la pieza como cuarto argumento
+	var protocol_id = BlockSystem.create_escape_protocol(
+		escape_blocks,
+		ram_cost,
+		name,
+		current_piece.piece_color
+	)
+	print("Protocolo creado de forma aislada: ", protocol_id)
 	load_block_palette()
 
 func _on_escape_pressed() -> void:
@@ -809,25 +821,6 @@ func _on_escape_pressed() -> void:
 	popup.escape_confirmed.connect(
 		_on_escape_name_confirmed
 	)
-
-func _on_escape_name_confirmed(name:String):
-	update_blocks_from_workspace()
-
-	var escape_blocks := []
-
-	for block in current_blocks:
-		escape_blocks.append(
-			block.duplicate(true)
-		)
-
-	var ram_cost = calculate_current_ram_usage() * 2
-	var protocol_id = BlockSystem.create_escape_protocol(
-		escape_blocks,
-		ram_cost,
-		name
-	)
-	print("Protocolo creado:", protocol_id)
-	load_block_palette()
 
 func install_defense_protocol():
 	for block in current_blocks:

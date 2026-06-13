@@ -17,6 +17,9 @@ extends Node
 var game_over := false
 var winner := ""
 
+# Contador de turnos
+var current_turn_count: int = 1
+
 # Diccionario global para guardar programas
 var saved_programs = {}
 
@@ -55,6 +58,9 @@ func _ready():
 	_initialize_game()
 	call_deferred("_test_block_system")
 	call_deferred("_connect_piece_signals")
+	var res_manager = get_node_or_null("res://src/core/ResolutionManager.gd") # ajustá el path
+	if res_manager and res_manager.has_signal("resolution_changed"):
+		res_manager.resolution_changed.connect(on_resolution_changed)
 
 func _initialize_game():
 	spawn_pawns()
@@ -72,12 +78,6 @@ func _initialize_game():
 
 func on_resolution_changed(new_resolution: Vector2i):
 	print("GameManager: Resolución cambiada a ", new_resolution)
-	
-	# 1. Esperar a que el board se actualice
-	await get_tree().process_frame
-	
-	# 2. Re-posicionar todas las piezas
-	_reposition_all_pieces()
 
 func _reposition_all_pieces():
 	print("Re-posicionando todas las piezas...")
@@ -89,7 +89,6 @@ func _reposition_all_pieces():
 			
 			# Actualizar posición
 			piece.position = new_world_pos
-			piece.global_position = new_world_pos
 			
 			print("  ", piece.piece_type, " movido a: ", new_world_pos)
 
@@ -132,7 +131,8 @@ func _board_to_world_position(board_coord: Vector2) -> Vector2:
 	
 	# Fallback con valores por defecto
 	print("WARNING: Usando fallback para coordenada ", board_coord)
-	return Vector2(320 + board_coord.x * 80, 384 + (7 - board_coord.y) * 80)
+	var origin = board.global_position
+	return Vector2(origin.x + board_coord.x * 80, origin.y + (7 - board_coord.y) * 80)
 
 func _debug_board_info():
 	print("=== BOARD POSITION DEBUG ===")
@@ -219,27 +219,30 @@ func can_capture(attacker_color: String, defender_color: String) -> bool:
 
 func capture_piece(piece_to_capture):
 	if piece_to_capture.defense_protocol_active:
-		print("DEFENSE PROTOCOL ACTIVATED:",piece_to_capture.piece_id)
-		print("Captura cancelada por protocolo defensivo")
-		await execute_defense_protocol(
-			piece_to_capture
-		)
+		print("DEFENSE PROTOCOL ACTIVATED:", piece_to_capture.piece_id)
+		await execute_defense_protocol(piece_to_capture)
 		return
-	# captura normal
-	var captured_type = piece_to_capture.piece_type
+ 
+	var captured_type  = piece_to_capture.piece_type
 	var captured_color = piece_to_capture.piece_color
-	piece_to_capture.board_position = Vector2(-999, -999)
+ 
+	piece_to_capture.board_position         = Vector2(-999, -999)
 	piece_to_capture.virtual_board_position = Vector2(-999, -999)
-	piece_to_capture.queue_free()
-	print(
-		"Pieza capturada: ",
-		captured_color,
-		" ",
-		captured_type,
-		", id:",
-		piece_to_capture.piece_id
-	)
+	piece_to_capture.visible = false
+ 
+	if piece_to_capture.has_node("Area2D"):
+		piece_to_capture.get_node("Area2D").input_pickable = false
+		piece_to_capture.get_node("Area2D").monitoring     = false
+ 
+	piece_to_capture.set_meta("is_dead", true)
+ 
+	print("Pieza marcada para eliminación: ", captured_color, " ", captured_type,
+		  ", id:", piece_to_capture.piece_id)
+ 
+	# Esperamos el frame para que el árbol de escena esté estable
 	await get_tree().process_frame
+ 
+	# Verificar victoria INMEDIATAMENTE después de marcar la pieza
 	check_victory_conditions()
 
 func open_programming_interface_for_piece(piece: Node, mouse_pos: Vector2):
@@ -503,43 +506,9 @@ func print_all_piece_positions():
 		print("Piece:", piece.piece_type, " at cell:", coord)
 	print("===========================")
 
-func _test_block_system():
-	print("=== TEST BLOCK SYSTEM DEBUG ===")
-	
-	# Verificar si BlockSystem existe
-	if not BlockSystem:
-		print("ERROR: BlockSystem no está cargado")
-		return
-	
-	print("BlockSystem encontrado")
-	
-	# Probar obtener un bloque
-	var test_block = BlockSystem.get_block_info("move_forward")
-	print("Bloque 'move_forward':")
-	print("  Tipo: ", typeof(test_block))
-	print("  Es diccionario: ", test_block is Dictionary)
-	print("  Contenido: ", test_block)
-	print("  Tiene 'name': ", "name" in test_block if test_block is Dictionary else "N/A")
-	print("  Tiene 'ram_cost': ", "ram_cost" in test_block if test_block is Dictionary else "N/A")
-	
-	# Si el bloque está vacío, usar valores por defecto
-	if test_block.is_empty():
-		print("ADVERTENCIA: get_block_info devolvió diccionario vacío")
-		# Crear bloque de prueba manualmente
-		test_block = {
-			"name": "Mover Adelante",
-			"ram_cost": 2,
-			"category": "movement",
-			"description": "Avanza una casilla hacia adelante"
-		}
-		print("  Usando bloque de prueba: ", test_block)
-	
-	print("=== FIN TEST ===\n")
-
 func _connect_piece_signals():
 	print("Connecting piece signals...")
 	var connected_count = 0
-	
 	for piece in pieces_container.get_children():
 		# Conectar señal right_clicked si existe
 		if piece.has_signal("right_clicked"):
@@ -547,11 +516,9 @@ func _connect_piece_signals():
 				piece.right_clicked.connect(_on_piece_right_clicked)
 				connected_count += 1
 				print("Connected right_clicked to: ", piece.piece_type)
-		
 		# Configurar estado inicial del Área2D
 		if piece.has_node("Area2D"):
 			var area2d = piece.get_node("Area2D")
-			
 			# Inicialmente solo las blancas pueden programarse
 			if piece.piece_color == current_turn:
 				area2d.input_pickable = true
@@ -565,9 +532,8 @@ func _connect_piece_signals():
 	print("Connected to ", connected_count, " pieces")
 	print("Input configured for current turn: ", current_turn)
 
-# ==============================================
 # NUEVO SISTEMA DE PROGRAMACIÓN POR BLOQUES
-# ==============================================
+
 
 func start_programming_phase():
 	print("=== FASE DE PROGRAMACIÓN ===")
@@ -638,8 +604,16 @@ func execute_programs_sequentially():
 	execution_timer.timeout.connect(func():
 		if index < programmed_moves.size():
 			var data = programmed_moves[index]
+			var piece = data["piece"]
+			
+			# VALIDACIÓN: Si la pieza fue destruida por un contraataque de escape, saltamos su turno
+			if not is_instance_valid(piece) or piece.get_meta("is_dead", false) == true:
+				print("Saltando programa de pieza eliminada en combate.")
+				index += 1
+				return
+				
 			print("Ejecutando programa ", index + 1, "/", programmed_moves.size())
-			execute_piece_program(data["piece"])
+			execute_piece_program(piece)
 			index += 1
 		else:
 			execution_timer.queue_free()
@@ -649,6 +623,32 @@ func execute_programs_sequentially():
 	)
 	
 	execution_timer.start()
+
+func end_turn():
+	print("=== FIN DEL TURNO ===")
+ 
+	# Liberar piezas muertas
+	for piece in pieces_container.get_children():
+		if piece.get_meta("is_dead", false) == true:
+			print("Liberando memoria de: ", piece.piece_id)
+			piece.queue_free()
+ 
+	programmed_moves.clear()
+	execution_phase = false
+ 
+	# Si el juego terminó no cambiar turno ni iniciar programación
+	if game_over:
+		return
+ 
+	switch_turn()
+ 
+	await get_tree().create_timer(1.0).timeout
+ 
+	# Doble chequeo: la victoria puede haber ocurrido durante el timer
+	if game_over:
+		return
+ 
+	start_programming_phase()
 
 func _on_execute_turn_button_pressed():
 	# Solo iniciamos si no estamos ya ejecutando movimientos
@@ -808,59 +808,52 @@ func _is_basic_move_valid(piece: Node, target_cell: Vector2) -> bool:
 func move_piece_to(piece: Node, target_cell: Vector2) -> bool:
 	var target_cell_i = Vector2i(target_cell)
 	var current_cell_i = Vector2i(piece.board_position)
-	# 1. Fuera de límites del tablero
+	
 	if target_cell_i.x < 0 or target_cell_i.x > 7 or target_cell_i.y < 0 or target_cell_i.y > 7:
-		print("Movimiento abortado: Fuera de límites")
-		return true # Detener ejecución del programa de la pieza
-	# 2. VALIDACIÓN DE OBSTÁCULOS EN EL CAMINO EL CABALLO SE LO SALTA
+		print("Fuera de límites: ", target_cell)
+		return true
+
 	if piece.piece_type != "horse":
 		var diff = target_cell_i - current_cell_i
-		# Calculamos la dirección del paso en cada eje (-1, 0 o 1)
-		var step = Vector2i(
-			sign(diff.x),
-			sign(diff.y)
-		)
+		var step = Vector2i(sign(diff.x), sign(diff.y))
 		var check_cell = current_cell_i + step
-		# Avanzamos celda por celda en línea recta/diagonal ANTES del destino final
 		while check_cell != target_cell_i:
 			var obstacle = get_piece_at(check_cell)
 			if obstacle != null:
-				print("HARDWARE ERROR: ", piece.piece_type, " colisionó con ", obstacle.piece_type, " en el camino ", check_cell)
-				return true # Chocó en el trayecto, abortamos el hilo del script
-				
+				print("HARDWARE ERROR: ", piece.piece_type, " colisionó con ", obstacle.piece_type, " en ", check_cell)
+				return true
 			check_cell += step
 	else:
-		# Debug para confirmar que el caballo está usando su propiedad de salto
-		print("PROPIEDAD DE SALTO: El caballo ", piece.piece_id, " ignora el camino desde ", current_cell_i, " hasta ", target_cell_i)
+		print("PROPIEDAD DE SALTO: El caballo ", piece.piece_id, " salta de ", current_cell_i, " a ", target_cell_i)
 
-	# 3. Verificar el ocupante de la CASILLA FINAL (Destino)
 	var piece_at_target = get_piece_at(target_cell_i)
 	if piece_at_target:
-		# Si hay una pieza enemiga -> Captura automática (también aplica al caballo al aterrizar)
 		if piece_at_target.piece_color != piece.piece_color:
-			print("Capturando pieza enemiga al aterrizar: ", piece_at_target.piece_type)
-			capture_piece(piece_at_target)
-			# Mover visualmente y actualizar lógica
+			print("Captura en ", target_cell)
+			# NUEVO: primero mover visualmente la pieza atacante, luego capturar
 			piece.board_position = target_cell
+			piece.virtual_board_position = target_cell
 			var target_world_pos = _board_to_world_position(target_cell)
 			var tween = create_tween()
 			tween.tween_property(piece, "position", target_world_pos, 0.3)
-			return true # Hubo captura, detenemos el hilo de este turno
+			await tween.finished
+			# Capturar DESPUÉS de que la animación terminó
+			await capture_piece(piece_at_target)
+			return true
 		else:
-			# === EXCEPCIÓN DEL CABALLO ===
 			if piece.piece_type == "horse":
 				print("Caballo aterriza sobre aliado (modo salto avanzado)")
 			else:
-				print("Bloqueado: Casilla de aterrizaje ocupada por aliado.")
+				print("Bloqueado: Casilla ocupada por aliado en ", target_cell_i)
 				return true
-	
-	# 4. Movimiento normal (casilla de destino vacía)
+
+	# Movimiento normal
 	piece.board_position = target_cell
+	piece.virtual_board_position = target_cell
 	var target_world_pos = _board_to_world_position(target_cell)
 	var tween = create_tween()
-	# Añadimos un pequeño efecto de arco/salto visual en el Tween para que se note que salta
-	tween.set_parallel(false)
 	tween.tween_property(piece, "position", target_world_pos, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	await tween.finished
 	return false
 
 func attempt_capture(piece: Node, direction: String):
@@ -881,20 +874,6 @@ func attempt_capture(piece: Node, direction: String):
 	
 	if is_valid_move(piece, target_cell):
 		move_piece_to(piece, target_cell)
-
-func end_turn():
-	print("=== FIN DEL TURNO ===")
-	
-	# Limpiar programas ejecutados
-	programmed_moves.clear()
-	execution_phase = false
-	
-	# Cambiar turno
-	switch_turn()
-	
-	# Iniciar siguiente fase de programación
-	await get_tree().create_timer(1.0).timeout
-	start_programming_phase()
 
 # Función para iniciar ejecución manual (para testing)
 func start_execution_manually():
@@ -1070,66 +1049,130 @@ func _logic_move_back(piece: Node):
 func _logic_capture(piece: Node):
 	attempt_capture(piece, "front")
 
-#Cambio de turno
-
-# Esta función coordina a TODAS las piezas
+# Esta función coordina a TODAS las piezas (Modificada para integrar la IA)
 func execute_turn_and_switch():
 	if execution_phase: return
-	
-	# 1. Buscamos piezas únicas programadas
-	var pieces_to_run = []
-	var processed_ids = {} # Para evitar duplicados en el array
-	
+ 
+	var pieces_to_run  = []
+	var processed_ids  = {}
+ 
 	for piece in pieces_container.get_children():
 		var pid = piece.get_instance_id()
 		if piece.piece_color == current_turn and piece.is_programmed and not processed_ids.has(pid):
 			pieces_to_run.append(piece)
 			processed_ids[pid] = true
-	
+ 
 	if pieces_to_run.is_empty():
+		_cambiar_bando_y_avanzar()
 		return
-	
-	execution_phase = true 
-	print("--- INICIANDO EJECUCIÓN DE TURNO ---")
-
+ 
+	execution_phase = true
+	print("--- INICIANDO EJECUCIÓN DE TURNO: ", current_turn.to_upper(), " ---")
+ 
 	for piece in pieces_to_run:
-		# IMPORTANTE: Desmarcamos la pieza ANTES de ejecutar para evitar re-entradas
-		piece.is_programmed = false 
-		
+		# Si el juego terminó durante la ejecución de otra pieza, parar
+		if game_over:
+			break
+ 
+		piece.is_programmed = false
 		await execute_piece_program(piece)
 		await get_tree().create_timer(0.2).timeout
-
+ 
 	execution_phase = false
-	print("--- TURNO FINALIZADO ---")
-	
-	# 2. LIMPIEZA TOTAL: Por seguridad, limpiamos cualquier flag restante
+	print("--- EJECUCIÓN DE MOVIMIENTOS FINALIZADA ---")
+ 
 	for piece in pieces_container.get_children():
 		if piece.piece_color == current_turn:
 			piece.is_programmed = false
+ 
+	_cambiar_bando_y_avanzar()
 
+func _cambiar_bando_y_avanzar():
+	# Si el juego ya terminó (rey capturado durante la ejecución),
+	# no cambiar turno ni disparar la IA
+	if game_over:
+		return
+ 
+	var bando_que_jugo = current_turn
 	end_turn()
+ 
+	# Chequear de nuevo por si end_turn disparó algo (defensas, etc.)
+	if game_over:
+		return
+ 
+	if bando_que_jugo == "black":
+		current_turn_count += 1
+		print("\n=======================================================")
+		print("=== RONDA COMPLETA. Iniciando Turno Global N°: ", current_turn_count, " ===")
+		print("=======================================================\n")
+	else:
+		print("[GameManager]: Es el turno de la IA (Negro). Solicitando jugada...")
+		var bot_jugo = BotSystem.procesar_turno_ia(self)
+		if bot_jugo:
+			await get_tree().process_frame
+			execute_turn_and_switch()
+		else:
+			print("[GameManager]: La IA no pudo jugar. Forzando devolución de turno al humano.")
+			end_turn()
 
 func execute_piece_program(piece: Node):
 	print("--- Ejecutando programa de: ", piece.piece_id)
 	piece.reset_execution()
 	for i in range(piece.behavior_script.size()):
 		var current_block = piece.behavior_script[i]
-		var info = BlockSystem.get_block_info(
-			current_block.get("type", "")
-		)
-		# Los protocolos defensivos NO se ejecutan
+		var block_type = current_block.get("type", "")
+		var info = BlockSystem.get_block_info(block_type)
+		
 		if info.get("category") == "action":
 			continue
-		print("  Instrucción ", i, ": ", current_block.get("type", "unknown"))
-		var result = await piece.execute_next_command()
-		await get_tree().create_timer(0.4).timeout
-		if result is Dictionary and result.get("stop_execution", false):
-			print("Programa interrumpido por solicitud de la pieza.")
-			break
+		
+		print("  Instrucción ", i, ": ", block_type)
+		
+		# NUEVO: piezas negras usan ejecución directa (el bot ya calculó el vector correcto)
+		if piece.piece_color == "black":
+			var result = await _execute_block_direct(piece, block_type)
+			await get_tree().create_timer(0.4).timeout
+			if result.get("stop_execution", false):
+				print("Programa interrumpido por solicitud de la pieza.")
+				break
+		else:
+			var result = await piece.execute_next_command()
+			await get_tree().create_timer(0.4).timeout
+			if result is Dictionary and result.get("stop_execution", false):
+				print("Programa interrumpido por solicitud de la pieza.")
+				break
+	
 	print("DEFENSE:", piece.defense_protocol)
+
+# Ejecuta un bloque de movimiento usando el vector tal cual (sin inversión de perspectiva).
+# Usado por la IA negra, que ya calcula sus vectores en coordenadas absolutas del tablero.
+func _execute_block_direct(piece: Node, block_type: String) -> Dictionary:
+	var info = BlockSystem.get_block_info(block_type)
+	if info.is_empty() or not info.has("vector"):
+		return {"stop_execution": true}
+	
+	var vec = Vector2i(info["vector"])
+	var current_pos = Vector2i(piece.board_position)
+	var target = current_pos + vec  # sin multiplicar por -1
+	
+	print("[BOT EXEC] ", piece.piece_id, " ejecuta ", block_type, " → ", target)
+	
+	if is_valid_move(piece, target):
+		var hit = await move_piece_to(piece, Vector2(target))
+		return {"stop_execution": hit}
+	else:
+		var obstacle = get_piece_at(target)
+		if obstacle:
+			print("HARDWARE ERROR: Destino bloqueado por aliado en ", target)
+		else:
+			print("Fuera de límites: ", Vector2(target))
+		return {"stop_execution": true}
 
 func get_piece_at(board_coord: Vector2i, use_virtual := true) -> Node:
 	for piece in pieces_container.get_children():
+		# NUEVO: ignorar piezas muertas
+		if piece.get_meta("is_dead", false):
+			continue
 		var pos := Vector2i(
 			piece.virtual_board_position
 			if use_virtual
@@ -1152,68 +1195,137 @@ func _logic_if_cell_empty(piece: Node) -> Dictionary:
 		return {"stop_execution": true}
 
 #Victoria
-
 func check_victory_conditions():
 	if game_over:
 		return
-	var white_king_exists := false
-	var black_king_exists := false
+ 
+	var white_king_alive := false
+	var black_king_alive  := false
+ 
 	for piece in pieces_container.get_children():
+		if piece.get_meta("is_dead", false):
+			continue
 		if piece.piece_type == "king":
 			if piece.piece_color == "white":
-				white_king_exists = true
+				white_king_alive = true
 			elif piece.piece_color == "black":
-				black_king_exists = true
-	# =========================
-	# RESULTADOS
-	# =========================
-	if not white_king_exists:
+				black_king_alive = true
+ 
+	if not white_king_alive:
+		# Setear ANTES de end_game para que cualquier código que corra
+		# después del await lo vea inmediatamente
+		game_over = true
 		end_game("black")
-	elif not black_king_exists:
+	elif not black_king_alive:
+		game_over = true
 		end_game("white")
 
 func end_game(winning_color: String):
-	if game_over:
-		return
+	if game_over and winner != "":
+		return  # Ya procesado
 	game_over = true
 	winner = winning_color
+	
 	print("======================")
 	print("GAME OVER")
 	print("Winner: ", winning_color)
 	print("======================")
+	
 	current_turn = "none"
+	
 	if execution_timer:
 		execution_timer.stop()
+	
 	for piece in pieces_container.get_children():
 		if piece.has_node("Area2D"):
-			var area = piece.get_node("Area2D")
-			area.input_pickable = false
-			area.monitoring = false
-	# CREAR UI GAME OVER
+			piece.get_node("Area2D").input_pickable = false
+			piece.get_node("Area2D").monitoring = false
+	
+	# Buscar CanvasLayer de forma robusta
+	var canvas_layer = get_node_or_null("/root/Main/CanvasLayer")
+	if not canvas_layer:
+		# Buscar en toda la escena
+		canvas_layer = get_tree().root.find_child("CanvasLayer", true, false)
+	if not canvas_layer:
+		# Crear uno nuevo como fallback
+		canvas_layer = CanvasLayer.new()
+		canvas_layer.name = "CanvasLayer_GameOver"
+		get_tree().root.add_child(canvas_layer)
+	
+	print("CanvasLayer encontrado: ", canvas_layer.get_path())
+	
 	var game_over_ui = GameOverScreenScene.instantiate()
-	var canvas_layer = get_node("/root/Main/CanvasLayer")
 	canvas_layer.add_child(game_over_ui)
 	game_over_ui.setup(winning_color)
+	
+	print("Pantalla de Game Over instanciada.")
 
 #Defensa
 func execute_defense_protocol(piece):
 	if piece.defense_protocol == null:
-		capture_piece(piece)
+		_kill_defending_piece(piece) # Si no hay protocolo, muere directo
 		return
-	var protocol_type = piece.defense_protocol.get(
-		"type",
-		""
-	)
+	var protocol_type = piece.defense_protocol.get("type", "")
 	if protocol_type.is_empty():
-		capture_piece(piece)
+		_kill_defending_piece(piece)
 		return
-	var protocol_data = BlockSystem.get_block_info(
-		protocol_type
-	)
+	var protocol_data = BlockSystem.get_block_info(protocol_type)
 	if protocol_data.is_empty():
-		capture_piece(piece)
+		_kill_defending_piece(piece)
 		return
-	await BlockSystem.execute_escape_protocol(
-		piece,
-		protocol_data
+		
+	# VALIDADOR DE CASILLA DE ESCAPE
+	var defense_blocks = piece.defense_protocol.get("contained_blocks", [])
+	if defense_blocks.is_empty():
+		print("[DEFENSA] El protocolo de escape no contiene bloques de movimiento.")
+		_kill_defending_piece(piece)
+		return
+		
+	var move_block_type = defense_blocks[0].get("type", "")
+	var move_block_info = BlockSystem.get_block_info(move_block_type)
+	if move_block_info.is_empty() or not move_block_info.has("vector"):
+		_kill_defending_piece(piece)
+		return
+		
+	# 2. Calcular coordenada teórica usando la posición VIRTUAL
+	var vec = Vector2i(move_block_info["vector"])
+	var side_multiplier = -1 if piece.piece_color == "white" else 1
+	
+	var escape_target = Vector2i(
+		piece.virtual_board_position.x + vec.x,
+		piece.virtual_board_position.y + (vec.y * side_multiplier)
 	)
+	
+	# 3. Comprobar límites del tablero preventivamente
+	if escape_target.x < 0 or escape_target.x > 7 or escape_target.y < 0 or escape_target.y > 7:
+		print("[DEFENSA] Escape fallido preventivo: Fuera del tablero (", escape_target, ").")
+		_kill_defending_piece(piece)
+		return
+		
+	# 4. Comprobar colisión preventiva
+	var target_world_pos = _board_to_world_position(Vector2(escape_target))
+	var obstacle = get_piece_at_position(target_world_pos)
+	
+	if obstacle != null:
+		print("[DEFENSA] Escape fallido preventivo: Casilla ", escape_target, " ocupada por ", obstacle.piece_id)
+		_kill_defending_piece(piece) # <-- CAMBIADO: Muere sin gatillar re-evaluación
+		return
+		
+	# 5. Si la casilla está libre, procedemos al BlockSystem
+	print("[DEFENSA] Casilla ", escape_target, " libre preventivamente. Ejecutando escape...")
+	var result = await BlockSystem.execute_escape_protocol(piece, protocol_data)
+	
+	# 6. Validación post-ejecución por si las moscas
+	if result is Dictionary and (result.get("action") == "blocked" or result.get("stop_execution", false)):
+		print("[DEFENSA] El BlockSystem denegó el movimiento. Ejecutando muerte.")
+		_kill_defending_piece(piece)
+
+func _kill_defending_piece(piece: Node):
+	print("[SISTEMA] Eliminando pieza defensora ", piece.piece_id, " por escape fallido.")
+	piece.board_position = Vector2(-999, -999)
+	piece.virtual_board_position = Vector2(-999, -999)
+	piece.visible = false
+	if piece.has_node("Area2D"):
+		piece.get_node("Area2D").input_pickable = false
+		piece.get_node("Area2D").monitoring = false
+	piece.set_meta("is_dead", true)

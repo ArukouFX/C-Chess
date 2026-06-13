@@ -1,0 +1,139 @@
+[gd_scene load_steps=20 format=3 uid="uid://10xfqjyoeplg"]
+
+[ext_resource type="Shader" uid="uid://bvkmoiob05hns" path="res://assets/shaders/clouds.gdshader" id="1_6iyac"]
+[ext_resource type="Shader" uid="uid://byhf8vn3y83bs" path="res://assets/shaders/TurnDisplay.gdshader" id="1_344ge"]
+[ext_resource type="PackedScene" uid="uid://fbmsqh4ve7dt" path="res://src/entities/board/board.tscn" id="1_bo1nx"]
+[ext_resource type="Texture2D" uid="uid://dp6sjy63c7o4x" path="res://assets/graphics/background.png" id="1_d1ilt"]
+[ext_resource type="Script" uid="uid://dwjhmycffdwlt" path="res://main.gd" id="1_fdnlq"]
+[ext_resource type="Texture2D" uid="uid://bhr80qslg33i7" path="res://assets/graphics/turn-white.png" id="1_jjvhh"]
+[ext_resource type="PackedScene" uid="uid://12fcn0yfrd3a" path="res://src/entities/pieces/piece.tscn" id="2_8gbba"]
+[ext_resource type="Script" uid="uid://cpk5464xmocxn" path="res://src/core/turn_display.gd" id="2_kry3j"]
+[ext_resource type="Script" uid="uid://dr3rbxcunf7rt" path="res://src/core/game_manager.gd" id="3_8gbba"]
+[ext_resource type="Script" uid="uid://cxr2shpuh8smm" path="res://src/ui/hud/sprite_2d.gd" id="4_fdnlq"]
+[ext_resource type="AudioStream" uid="uid://cxq42qqbm0fg8" path="res://assets/music/chess beat.mp3" id="6_21xkr"]
+[ext_resource type="Script" uid="uid://dajpp3ftrbqj6" path="res://src/ui/hud/camera_2d.gd" id="7_hptm8"]
+[ext_resource type="Script" uid="uid://dktbk61gsaipm" path="res://src/programming/test_blocks.gd" id="11_d1ilt"]
+[ext_resource type="Shader" uid="uid://mlt36j70g31y" path="res://assets/shaders/transition.gdshader" id="14_w48qg"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_fdnlq"]
+shader = ExtResource("1_6iyac")
+shader_parameter/speed = 1.0
+shader_parameter/cloud_scale = 3.0
+shader_parameter/softness = 2.0
+shader_parameter/ps1_resolution = 240.0
+shader_parameter/vertex_snap_intensity = 0.5
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_344ge"]
+shader = ExtResource("1_344ge")
+shader_parameter/color_cycle_speed = 1.0
+shader_parameter/color_intensity = 0.5
+shader_parameter/pixel_size = 8.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_ynf5e"]
+shader = ExtResource("1_344ge")
+shader_parameter/color_cycle_speed = 1.0
+shader_parameter/color_intensity = 0.5
+shader_parameter/pixel_size = 8.0
+
+[sub_resource type="GDScript" id="GDScript_d1ilt"]
+script/source = "extends Node2D
+
+var dance_tween: Tween
+var is_animating = false
+
+func _ready():
+	start_dance_animation()
+
+func start_dance_animation():
+	if dance_tween:
+		dance_tween.kill()
+	
+	dance_tween = create_tween()
+	dance_tween.set_loops()
+
+	var pulse_duration = 0.6
+	
+	dance_tween.tween_property(self, \"scale\", Vector2(1.02, 1.02), pulse_duration)
+	dance_tween.tween_property(self, \"scale\", Vector2(1.0, 1.0), pulse_duration)
+	
+	is_animating = true
+
+func stop_dance_animation():
+	if dance_tween:
+		dance_tween.kill()
+		dance_tween = null
+
+	var reset_tween = create_tween()
+	reset_tween.tween_property(self, \"scale\", Vector2(1.0, 1.0), 0.2)
+	
+	is_animating = false
+"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_vivmo"]
+shader = ExtResource("14_w48qg")
+shader_parameter/progress = 1.0
+shader_parameter/pixel_size = 64.0
+shader_parameter/base_color = Color(0.031, 0.094, 0.125, 1)
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_fdnlq")
+
+[node name="BackGround" type="Node2D" parent="."]
+
+[node name="BackGround" type="Sprite2D" parent="BackGround"]
+material = SubResource("ShaderMaterial_fdnlq")
+texture = ExtResource("1_d1ilt")
+region_enabled = true
+script = ExtResource("4_fdnlq")
+
+[node name="Turn" type="Node2D" parent="."]
+material = SubResource("ShaderMaterial_344ge")
+
+[node name="TurnDisplay" type="Sprite2D" parent="Turn"]
+material = SubResource("ShaderMaterial_ynf5e")
+texture = ExtResource("1_jjvhh")
+script = ExtResource("2_kry3j")
+
+[node name="Table" type="Node2D" parent="."]
+
+[node name="Board" parent="Table" instance=ExtResource("1_bo1nx")]
+
+[node name="Pieces" type="Node2D" parent="."]
+script = SubResource("GDScript_d1ilt")
+
+[node name="Piece" parent="Pieces" instance=ExtResource("2_8gbba")]
+
+[node name="Camera" type="Node2D" parent="."]
+
+[node name="Camera2D" type="Camera2D" parent="Camera"]
+script = ExtResource("7_hptm8")
+
+[node name="GameManager" type="Node" parent="."]
+script = ExtResource("3_8gbba")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="Music" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("6_21xkr")
+volume_db = -5.0
+pitch_scale = 0.9
+autoplay = true
+parameters/looping = true
+
+[node name="Debug" type="Node" parent="."]
+script = ExtResource("11_d1ilt")
+
+[node name="TransitionLayer" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="TransitionRect" type="ColorRect" parent="TransitionLayer"]
+z_index = 10
+material = SubResource("ShaderMaterial_vivmo")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0313726, 0.0941176, 0.12549, 1)
+
+[connection signal="released" from="Pieces/Piece" to="GameManager" method="_on_piece_released"]

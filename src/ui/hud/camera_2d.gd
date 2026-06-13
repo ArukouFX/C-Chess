@@ -33,8 +33,8 @@ func center_on_board():
 	elif board:
 		# Calcular centro manualmente
 		var board_pos = board.position
-		var cell_size = board.cell_size if board.has_method("get_cell_size") else 80.0
-		var board_size = board.board_size if board.has_method("get_board_size") else Vector2(8, 8)
+		var cell_size = board.cell_size if "cell_size" in board else 80.0
+		var board_size = board.board_size if "board_size" in board else Vector2(8, 8)
 		
 		var board_total_size = board_size * cell_size
 		board_center = board_pos + (board_total_size / 2)
