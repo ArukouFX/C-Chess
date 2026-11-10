@@ -18,4 +18,4 @@ test_results.xml
 # Herramientas personales
 .claude/
 .qwen/
-Tutorial.txt
+Tutorial.txt*.tmp
