@@ -1,3 +1,21 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# Multiuser Editor access list (local credentials, do not commit).
+.multiuser_access_list.json
+.aider*
+
+# Ejecutables exportados (se publican como Release)
+*.x86_64
+*.exe
+*.pck
+C-Chess.sh
+
+# Resultados de los tests
+test_results.xml
+
+# Herramientas personales
+.claude/
+.qwen/
+Tutorial.txt*.tmp

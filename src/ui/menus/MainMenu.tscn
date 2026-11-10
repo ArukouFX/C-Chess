@@ -1,0 +1,279 @@
+[gd_scene load_steps=19 format=3 uid="uid://dbkaaauv6oh0c"]
+
+[ext_resource type="Script" uid="uid://bf7fv4ivlmbxn" path="res://src/ui/menus/main_menu.gd" id="1_5r8iq"]
+[ext_resource type="Shader" uid="uid://bvkmoiob05hns" path="res://assets/shaders/clouds.gdshader" id="2_w5n6n"]
+[ext_resource type="Texture2D" uid="uid://dp6sjy63c7o4x" path="res://assets/graphics/background.png" id="3_ku40h"]
+[ext_resource type="Texture2D" uid="uid://6lt53olcca1y" path="res://assets/graphics/logo-2.png" id="4_y6pwi"]
+[ext_resource type="Shader" uid="uid://bqehhjpay2p5e" path="res://src/ui/menus/light_gameboy_buttons.gdshader" id="5_nb0wh"]
+[ext_resource type="FontFile" uid="uid://c1jvicc2lfsth" path="res://assets/fonts/ConnectionII.otf" id="6_58ntp"]
+[ext_resource type="Shader" uid="uid://mlt36j70g31y" path="res://assets/shaders/transition.gdshader" id="8_2wy8n"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_rlngk"]
+shader = ExtResource("2_w5n6n")
+shader_parameter/speed = 1.0
+shader_parameter/cloud_scale = 3.0
+shader_parameter/softness = 2.0
+shader_parameter/ps1_resolution = 240.0
+shader_parameter/vertex_snap_intensity = 0.5
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_wblbt"]
+shader = ExtResource("5_nb0wh")
+shader_parameter/color_1 = Color(0.878, 0.973, 0.816, 1)
+shader_parameter/color_2 = Color(0.533, 0.753, 0.439, 1)
+shader_parameter/color_3 = Color(0.204, 0.408, 0.337, 1)
+shader_parameter/color_4 = Color(0.031, 0.094, 0.125, 1)
+shader_parameter/hover_progress = 0.0
+shader_parameter/is_pressed = false
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_5r8iq"]
+shader = ExtResource("5_nb0wh")
+shader_parameter/color_1 = Color(0.878, 0.973, 0.816, 1)
+shader_parameter/color_2 = Color(0.533, 0.753, 0.439, 1)
+shader_parameter/color_3 = Color(0.204, 0.408, 0.337, 1)
+shader_parameter/color_4 = Color(0.031, 0.094, 0.125, 1)
+shader_parameter/hover_progress = 0.0
+shader_parameter/is_pressed = false
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_w5n6n"]
+shader = ExtResource("5_nb0wh")
+shader_parameter/color_1 = Color(0.878, 0.973, 0.816, 1)
+shader_parameter/color_2 = Color(0.533, 0.753, 0.439, 1)
+shader_parameter/color_3 = Color(0.204, 0.408, 0.337, 1)
+shader_parameter/color_4 = Color(0.031, 0.094, 0.125, 1)
+shader_parameter/hover_progress = 0.0
+shader_parameter/is_pressed = false
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_ku40h"]
+shader = ExtResource("5_nb0wh")
+shader_parameter/color_1 = Color(0.878, 0.973, 0.816, 1)
+shader_parameter/color_2 = Color(0.533, 0.753, 0.439, 1)
+shader_parameter/color_3 = Color(0.204, 0.408, 0.337, 1)
+shader_parameter/color_4 = Color(0.031, 0.094, 0.125, 1)
+shader_parameter/hover_progress = 0.0
+shader_parameter/is_pressed = false
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_y6pwi"]
+shader = ExtResource("5_nb0wh")
+shader_parameter/color_1 = Color(0.878, 0.973, 0.816, 1)
+shader_parameter/color_2 = Color(0.533, 0.753, 0.439, 1)
+shader_parameter/color_3 = Color(0.204, 0.408, 0.337, 1)
+shader_parameter/color_4 = Color(0.031, 0.094, 0.125, 1)
+shader_parameter/hover_progress = 0.0
+shader_parameter/is_pressed = false
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_nb0wh"]
+shader = ExtResource("5_nb0wh")
+shader_parameter/color_1 = Color(0.878, 0.973, 0.816, 1)
+shader_parameter/color_2 = Color(0.533, 0.753, 0.439, 1)
+shader_parameter/color_3 = Color(0.204, 0.408, 0.337, 1)
+shader_parameter/color_4 = Color(0.031, 0.094, 0.125, 1)
+shader_parameter/hover_progress = 0.0
+shader_parameter/is_pressed = false
+
+[sub_resource type="Animation" id="Animation_ra04o"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("MainContainer/LogoContainer/Control/Logo:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector2(0, 0)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("MainContainer/LogoContainer/Control/Logo:rotation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [0.0]
+}
+
+[sub_resource type="Animation" id="Animation_rcus0"]
+resource_name = "logo_float"
+length = 2.0
+loop_mode = 1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("MainContainer/LogoContainer/Control/Logo:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 1, 2),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector2(0, 0), Vector2(0, 20), Vector2(0, 0)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("MainContainer/LogoContainer/Control/Logo:rotation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.6, 1.2, 2),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [0.0, 0.0349066, -0.0349066, 0.0]
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_8am65"]
+_data = {
+&"RESET": SubResource("Animation_ra04o"),
+&"logo_float": SubResource("Animation_rcus0")
+}
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_yq2ft"]
+shader = ExtResource("8_2wy8n")
+shader_parameter/progress = 1.0
+shader_parameter/pixel_size = 64.0
+shader_parameter/base_color = Color(0.031, 0.094, 0.125, 1)
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_5r8iq")
+
+[node name="Background" type="TextureRect" parent="."]
+material = SubResource("ShaderMaterial_rlngk")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("3_ku40h")
+
+[node name="MainContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -160.0
+offset_top = -276.5
+offset_right = 160.0
+offset_bottom = 276.5
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="LogoContainer" type="CenterContainer" parent="MainContainer"]
+layout_mode = 2
+
+[node name="Control" type="Control" parent="MainContainer/LogoContainer"]
+custom_minimum_size = Vector2(320, 320)
+layout_mode = 2
+
+[node name="Logo" type="TextureRect" parent="MainContainer/LogoContainer/Control"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -160.0
+offset_top = -160.0
+offset_right = 160.0
+offset_bottom = 160.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("4_y6pwi")
+
+[node name="Spacer" type="Control" parent="MainContainer"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+
+[node name="ButtonsContainer" type="VBoxContainer" parent="MainContainer"]
+material = SubResource("ShaderMaterial_wblbt")
+layout_mode = 2
+theme_override_constants/separation = 15
+
+[node name="NewGameButton" type="Button" parent="MainContainer/ButtonsContainer"]
+material = SubResource("ShaderMaterial_5r8iq")
+layout_mode = 2
+theme_override_fonts/font = ExtResource("6_58ntp")
+theme_override_font_sizes/font_size = 30
+text = "Nueva Partida"
+
+[node name="LoadGameButton" type="Button" parent="MainContainer/ButtonsContainer"]
+material = SubResource("ShaderMaterial_w5n6n")
+layout_mode = 2
+theme_override_fonts/font = ExtResource("6_58ntp")
+theme_override_font_sizes/font_size = 30
+text = "Cargar Partida"
+
+[node name="MultiplayerButton" type="Button" parent="MainContainer/ButtonsContainer"]
+material = SubResource("ShaderMaterial_ku40h")
+layout_mode = 2
+theme_override_fonts/font = ExtResource("6_58ntp")
+theme_override_font_sizes/font_size = 30
+text = "Multijugador"
+
+[node name="Tutorial" type="Button" parent="MainContainer/ButtonsContainer"]
+material = SubResource("ShaderMaterial_ku40h")
+layout_mode = 2
+theme_override_fonts/font = ExtResource("6_58ntp")
+theme_override_font_sizes/font_size = 30
+text = "Tutorial"
+
+[node name="Desafios" type="Button" parent="MainContainer/ButtonsContainer"]
+material = SubResource("ShaderMaterial_ku40h")
+layout_mode = 2
+theme_override_fonts/font = ExtResource("6_58ntp")
+theme_override_font_sizes/font_size = 30
+text = "Desafíos"
+
+[node name="SettingsButton" type="Button" parent="MainContainer/ButtonsContainer"]
+material = SubResource("ShaderMaterial_y6pwi")
+layout_mode = 2
+theme_override_fonts/font = ExtResource("6_58ntp")
+theme_override_font_sizes/font_size = 30
+text = "Ajustes"
+
+[node name="ExitButton" type="Button" parent="MainContainer/ButtonsContainer"]
+material = SubResource("ShaderMaterial_nb0wh")
+layout_mode = 2
+theme_override_fonts/font = ExtResource("6_58ntp")
+theme_override_font_sizes/font_size = 30
+text = "Salir"
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+libraries = {
+&"": SubResource("AnimationLibrary_8am65")
+}
+autoplay = "logo_float"
+
+[node name="TransitionLayer" type="CanvasLayer" parent="."]
+
+[node name="TransitionRect" type="ColorRect" parent="TransitionLayer"]
+visible = false
+z_index = 10
+material = SubResource("ShaderMaterial_yq2ft")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0313726, 0.0941176, 0.12549, 1)
+
+[connection signal="pressed" from="MainContainer/ButtonsContainer/NewGameButton" to="." method="_on_new_game_button_pressed"]
+[connection signal="pressed" from="MainContainer/ButtonsContainer/LoadGameButton" to="." method="_on_load_game_button_pressed"]
+[connection signal="pressed" from="MainContainer/ButtonsContainer/MultiplayerButton" to="." method="_on_multiplayer_button_pressed"]
+[connection signal="pressed" from="MainContainer/ButtonsContainer/Tutorial" to="." method="_on_tutorial_pressed"]
+[connection signal="pressed" from="MainContainer/ButtonsContainer/Desafios" to="." method="_on_desafios_pressed"]
+[connection signal="pressed" from="MainContainer/ButtonsContainer/SettingsButton" to="." method="_on_settings_button_pressed"]
+[connection signal="pressed" from="MainContainer/ButtonsContainer/ExitButton" to="." method="_on_exit_button_pressed"]

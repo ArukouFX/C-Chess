@@ -1,0 +1,85 @@
+[gd_scene load_steps=7 format=3 uid="uid://dxhcua8jf175f"]
+
+[ext_resource type="Script" uid="uid://bhon07x4dles1" path="res://src/challenge/challenge_select_screen.gd" id="1_fnn1w"]
+[ext_resource type="Shader" uid="uid://bvkmoiob05hns" path="res://assets/shaders/clouds.gdshader" id="2_kqgiw"]
+[ext_resource type="Texture2D" uid="uid://dp6sjy63c7o4x" path="res://assets/graphics/background.png" id="3_hhiob"]
+[ext_resource type="Shader" uid="uid://bqehhjpay2p5e" path="res://src/ui/menus/light_gameboy_buttons.gdshader" id="4_r2q8j"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_7ouf0"]
+shader = ExtResource("2_kqgiw")
+shader_parameter/speed = 1.0
+shader_parameter/cloud_scale = 3.0
+shader_parameter/softness = 2.0
+shader_parameter/ps1_resolution = 240.0
+shader_parameter/vertex_snap_intensity = 0.5
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_ycbu7"]
+shader = ExtResource("4_r2q8j")
+shader_parameter/color_1 = Color(0.031, 0.094, 0.125, 1)
+shader_parameter/color_2 = Color(0.204, 0.408, 0.337, 1)
+shader_parameter/color_3 = Color(0.533, 0.753, 0.439, 1)
+shader_parameter/color_4 = Color(0.878, 0.973, 0.816, 1)
+shader_parameter/hover_progress = 0.0
+shader_parameter/is_pressed = false
+
+[node name="ChallengeSelectScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_fnn1w")
+
+[node name="Background" type="TextureRect" parent="."]
+material = SubResource("ShaderMaterial_7ouf0")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -160.0
+offset_top = -80.0
+offset_right = 160.0
+offset_bottom = 80.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("3_hhiob")
+
+[node name="Title" type="Label" parent="."]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="ScrollContainer" type="ScrollContainer" parent="."]
+custom_minimum_size = Vector2(450, 400)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -20.0
+offset_top = -20.0
+offset_right = 20.0
+offset_bottom = 20.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ChallengeList" type="VBoxContainer" parent="ScrollContainer"]
+layout_mode = 2
+
+[node name="BackButton" type="Button" parent="."]
+material = SubResource("ShaderMaterial_ycbu7")
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -30.5
+offset_top = -118.0
+offset_right = 30.5
+offset_bottom = -83.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "Volver"

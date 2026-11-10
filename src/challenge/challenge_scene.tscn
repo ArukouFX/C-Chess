@@ -1,0 +1,113 @@
+[gd_scene load_steps=10 format=3 uid="uid://y3ya2ngttjxr"]
+
+[ext_resource type="PackedScene" uid="uid://csq28q5pdlgi3" path="res://src/scenes/game_board.tscn" id="1_hr3p6"]
+[ext_resource type="Script" uid="uid://bw67ub5wx6ybp" path="res://src/challenge/challenge_manager.gd" id="14_emj0v"]
+[ext_resource type="FontFile" uid="uid://c1jvicc2lfsth" path="res://assets/fonts/ConnectionII.otf" id="15_18k2b"]
+[ext_resource type="Shader" uid="uid://bqehhjpay2p5e" path="res://src/ui/menus/light_gameboy_buttons.gdshader" id="16_5nate"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_uy7tw"]
+bg_color = Color(0.203922, 0.407843, 0.337255, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.533333, 0.752941, 0.439216, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_size = 8
+shadow_offset = Vector2(4, 4)
+
+[sub_resource type="LabelSettings" id="LabelSettings_3fuyg"]
+font = ExtResource("15_18k2b")
+font_size = 28
+font_color = Color(0.0313726, 0.0941176, 0.12549, 1)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_jwil4"]
+shader = ExtResource("16_5nate")
+shader_parameter/color_1 = Color(0.878, 0.973, 0.816, 1)
+shader_parameter/color_2 = Color(0.533, 0.753, 0.439, 1)
+shader_parameter/color_3 = Color(0.204, 0.408, 0.337, 1)
+shader_parameter/color_4 = Color(0.031, 0.094, 0.125, 1)
+shader_parameter/hover_progress = 0.0
+shader_parameter/is_pressed = false
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_hs5id"]
+shader = ExtResource("16_5nate")
+shader_parameter/color_1 = Color(0.878, 0.973, 0.816, 1)
+shader_parameter/color_2 = Color(0.533, 0.753, 0.439, 1)
+shader_parameter/color_3 = Color(0.204, 0.408, 0.337, 1)
+shader_parameter/color_4 = Color(0.031, 0.094, 0.125, 1)
+shader_parameter/hover_progress = 0.0
+shader_parameter/is_pressed = false
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_plr3w"]
+shader = ExtResource("16_5nate")
+shader_parameter/color_1 = Color(0.0313726, 0.0941176, 0.12549, 1)
+shader_parameter/color_2 = Color(0.203922, 0.407843, 0.337255, 1)
+shader_parameter/color_3 = Color(0.533333, 0.752941, 0.439216, 1)
+shader_parameter/color_4 = Color(0.878431, 0.972549, 0.815686, 1)
+shader_parameter/hover_progress = 0.0
+shader_parameter/is_pressed = false
+
+[node name="Main" instance=ExtResource("1_hr3p6")]
+
+[node name="Turn" parent="." index="1"]
+visible = false
+
+[node name="SetProgramming" parent="." index="6"]
+layer = 2
+
+[node name="Buttons" parent="." index="8"]
+visible = false
+
+[node name="ChallengeManager" type="Node" parent="." index="10"]
+script = ExtResource("14_emj0v")
+
+[node name="ChallengeUI" type="CanvasLayer" parent="." index="11"]
+offset = Vector2(200, 0)
+scale = Vector2(1.2, 1.2)
+transform = Transform2D(1.2, 0, 0, 1.2, 200, 0)
+
+[node name="InstructionPanel" type="PanelContainer" parent="ChallengeUI" index="0"]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -124.0
+offset_right = 124.0
+offset_bottom = 111.0
+grow_horizontal = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_uy7tw")
+
+[node name="VBox" type="VBoxContainer" parent="ChallengeUI/InstructionPanel" index="0"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TitleLabel" type="Label" parent="ChallengeUI/InstructionPanel/VBox" index="0"]
+layout_mode = 2
+label_settings = SubResource("LabelSettings_3fuyg")
+
+[node name="InstructionLabel" type="Label" parent="ChallengeUI/InstructionPanel/VBox" index="1"]
+layout_mode = 2
+
+[node name="ButtonsRow" type="HBoxContainer" parent="ChallengeUI/InstructionPanel/VBox" index="2"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="RetryButton" type="Button" parent="ChallengeUI/InstructionPanel/VBox/ButtonsRow" index="0"]
+material = SubResource("ShaderMaterial_jwil4")
+layout_mode = 2
+text = "Reintentar"
+
+[node name="SkipButton" type="Button" parent="ChallengeUI/InstructionPanel/VBox/ButtonsRow" index="1"]
+material = SubResource("ShaderMaterial_hs5id")
+layout_mode = 2
+text = "Salir del desafío"
+
+[node name="NextButton" type="Button" parent="ChallengeUI/InstructionPanel/VBox/ButtonsRow" index="2"]
+visible = false
+material = SubResource("ShaderMaterial_plr3w")
+layout_mode = 2
+text = "Siguiente
+"

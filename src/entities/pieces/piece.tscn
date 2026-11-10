@@ -1,0 +1,22 @@
+[gd_scene load_steps=5 format=3 uid="uid://12fcn0yfrd3a"]
+
+[ext_resource type="Script" uid="uid://ca3wwtgwoq3rd" path="res://src/entities/pieces/piece.gd" id="1_jf0mb"]
+[ext_resource type="Shader" uid="uid://cuga6tqeljckr" path="res://assets/shaders/piece_lighting.gdshader" id="1_y70yu"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_l2hco"]
+shader = ExtResource("1_y70yu")
+shader_parameter/shadow_softness = 0.02
+shader_parameter/shadow_offset_x = 0.01
+shader_parameter/shadow_offset_y = 0.01
+shader_parameter/shadow_color = Color(0, 0, 0, 0.3)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_jf0mb"]
+
+[node name="Piece" type="Sprite2D"]
+material = SubResource("ShaderMaterial_l2hco")
+script = ExtResource("1_jf0mb")
+
+[node name="Area2D" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
+shape = SubResource("RectangleShape2D_jf0mb")
