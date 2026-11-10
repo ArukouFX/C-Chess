@@ -1,0 +1,118 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ui/menus/difficulty_select.gd" id="1_script"]
+[ext_resource type="Theme" path="res://src/ui/menus/settings_theme.tres" id="2_theme"]
+
+[node name="DifficultySelect" type="Control"]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_script")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.031, 0.094, 0.125, 0.78)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(580, 0)
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="Center/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="Center/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 36
+text = "NUEVA PARTIDA"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Center/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.533, 0.753, 0.439, 1)
+theme_override_font_sizes/font_size = 18
+text = "Elige la dificultad del bot"
+horizontal_alignment = 1
+
+[node name="Sep1" type="HSeparator" parent="Center/Panel/VBox"]
+layout_mode = 2
+
+[node name="Levels" type="VBoxContainer" parent="Center/Panel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="EasyRow" type="HBoxContainer" parent="Center/Panel/VBox/Levels"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="EasyButton" type="Button" parent="Center/Panel/VBox/Levels/EasyRow"]
+custom_minimum_size = Vector2(160, 48)
+layout_mode = 2
+text = "Fácil"
+
+[node name="EasyHint" type="Label" parent="Center/Panel/VBox/Levels/EasyRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.533, 0.753, 0.439, 1)
+theme_override_font_sizes/font_size = 16
+autowrap_mode = 2
+
+[node name="NormalRow" type="HBoxContainer" parent="Center/Panel/VBox/Levels"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="NormalButton" type="Button" parent="Center/Panel/VBox/Levels/NormalRow"]
+custom_minimum_size = Vector2(160, 48)
+layout_mode = 2
+text = "Normal"
+
+[node name="NormalHint" type="Label" parent="Center/Panel/VBox/Levels/NormalRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.533, 0.753, 0.439, 1)
+theme_override_font_sizes/font_size = 16
+autowrap_mode = 2
+
+[node name="HardRow" type="HBoxContainer" parent="Center/Panel/VBox/Levels"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="HardButton" type="Button" parent="Center/Panel/VBox/Levels/HardRow"]
+custom_minimum_size = Vector2(160, 48)
+layout_mode = 2
+text = "Difícil"
+
+[node name="HardHint" type="Label" parent="Center/Panel/VBox/Levels/HardRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.533, 0.753, 0.439, 1)
+theme_override_font_sizes/font_size = 16
+autowrap_mode = 2
+
+[node name="Sep2" type="HSeparator" parent="Center/Panel/VBox"]
+layout_mode = 2
+
+[node name="CancelButton" type="Button" parent="Center/Panel/VBox"]
+custom_minimum_size = Vector2(160, 44)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Cancelar"

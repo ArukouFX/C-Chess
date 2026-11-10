@@ -14,15 +14,23 @@ config/name="C-Chess"
 run/main_scene="uid://dbkaaauv6oh0c"
 config/features=PackedStringArray("4.3.2", "GL Compatibility")
 boot_splash/bg_color=Color(0, 0, 0, 1)
-boot_splash/fullsize=false
 boot_splash/image="uid://ha0fpg2tfnxx"
 config/icon="uid://ckqd612jfq1tm"
 config/windows_native_icon="res://black-king.ico"
 boot_splash/minimum_display_time=2000
+boot_splash/stretch_mode=0
 
 [autoload]
 
 BlockSystem="*res://src/programming/block_system.gd"
+SaveManager="*res://src/core/save_manager.gd"
+GlobalConfig="*res://src/core/GlobalConfig.gd"
+ResolutionManager="*res://src/core/ResolutionManager.gd"
+MusicManager="*res://src/core/music_manager.gd"
+
+[blazium]
+
+justamcp/tools/project_tools=true
 
 [display]
 
@@ -30,6 +38,10 @@ window/size/viewport_width=1360
 window/size/viewport_height=768
 window/size/mode=2
 window/stretch/mode="canvas_items"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/gut/plugin.cfg")
 
 [rendering]
 

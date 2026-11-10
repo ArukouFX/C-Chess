@@ -2,410 +2,254 @@ extends Control
 
 class_name SettingsMenu
 
-@onready var volume_slider: HSlider =$PanelContainer/VBoxContainer/HBoxContainer3/VolumeSlider
+# Menu de opciones: modo de pantalla, resolucion de la ventana y volumen.
+#
+# - La pantalla se cambia en dos pasos: el jugador elige y luego confirma con
+#   "Aplicar". El boton solo se habilita si hay cambios pendientes; al cerrar
+#   sin aplicar, la seleccion vuelve a lo que esta en uso.
+# - El volumen y la dificultad del bot se aplican al instante y se guardan al
+#   cerrar el menu.
+# - ResolutionManager es el unico que cambia la ventana; MusicManager aplica
+#   el volumen guardado al iniciar el juego.
 
-# Señales
 signal resolution_changed(new_resolution: Vector2i)
 signal menu_closed
 
-# Resoluciones predefinidas
-const AVAILABLE_RESOLUTIONS = [
-	Vector2i(1280, 720),   # HD
-	Vector2i(1360, 768),   # Original del juego
-	Vector2i(1366, 768),   # Laptop común
-	Vector2i(1600, 900),   # HD+
-	Vector2i(1920, 1080),  # Full HD
-	Vector2i(2560, 1440),  # 2K
-	Vector2i(3840, 2160)   # 4K
+# Tamanos de ventana ofrecidos. El juego se adapta a cualquier proporcion
+# (ver ResolutionManager), asi que se incluyen 16:9, 16:10 y 21:9. 1366x768
+# no se ofrece: es practicamente igual a la base de 1360x768.
+const AVAILABLE_RESOLUTIONS: Array[Vector2i] = [
+	Vector2i(1280, 720),
+	Vector2i(1360, 768),   # Base del juego
+	Vector2i(1440, 900),
+	Vector2i(1600, 900),
+	Vector2i(1680, 1050),
+	Vector2i(1920, 1080),
+	Vector2i(1920, 1200),
+	Vector2i(2560, 1080),
+	Vector2i(2560, 1440),
+	Vector2i(3440, 1440),
+	Vector2i(3840, 2160),
 ]
+const DEFAULT_RESOLUTION := Vector2i(1360, 768)
+const DEFAULT_VOLUME := 0.8
+const TEXT_PENDING := "Hay cambios de pantalla sin aplicar"
+const TEXT_APPLIED := "Cambios aplicados"
+const DIFFICULTY_HINTS := {
+	"easy": "No usa loops ni escapes, y comete errores",
+	"normal": "Prevé tus loops, pero no los usa",
+	"hard": "Usa loops y escapes, y revisa más jugadas",
+}
 
-# Referencias usando rutas directas
-@onready var resolution_option: OptionButton = $PanelContainer/VBoxContainer/HBoxContainer/ResolutionOptionButton
-@onready var fullscreen_check: CheckBox = $PanelContainer/VBoxContainer/FullscreenCheckBox
-@onready var apply_button: Button = $PanelContainer/VBoxContainer/HBoxContainer2/ApplyButton
-@onready var close_button: Button = $PanelContainer/VBoxContainer/HBoxContainer2/CloseButton
+@onready var panel: PanelContainer = $Center/Panel
+@onready var windowed_button: Button = $Center/Panel/VBox/DisplayGrid/ModeRow/WindowedButton
+@onready var fullscreen_button: Button = $Center/Panel/VBox/DisplayGrid/ModeRow/FullscreenButton
+@onready var resolution_option: OptionButton = $Center/Panel/VBox/DisplayGrid/ResolutionOption
+@onready var volume_slider: HSlider = $Center/Panel/VBox/AudioGrid/VolumeRow/VolumeSlider
+@onready var volume_value: Label = $Center/Panel/VBox/AudioGrid/VolumeRow/VolumeValue
+@onready var difficulty_buttons := {
+	"easy": $Center/Panel/VBox/GameGrid/DifficultyRow/EasyButton,
+	"normal": $Center/Panel/VBox/GameGrid/DifficultyRow/NormalButton,
+	"hard": $Center/Panel/VBox/GameGrid/DifficultyRow/HardButton,
+}
+@onready var difficulty_hint: Label = $Center/Panel/VBox/DifficultyHint
+@onready var status_label: Label = $Center/Panel/VBox/StatusLabel
+@onready var reset_button: Button = $Center/Panel/VBox/Buttons/ResetButton
+@onready var apply_button: Button = $Center/Panel/VBox/Buttons/ApplyButton
+@onready var close_button: Button = $Center/Panel/VBox/Buttons/CloseButton
 
-var current_resolution: Vector2i = Vector2i(1360, 768)
-var is_fullscreen: bool = false
+# Resoluciones que entran en el monitor actual (las demas no se ofrecen)
+var resolutions: Array[Vector2i] = []
+# Seleccion en el menu, todavia no aplicada
+var selected_resolution: Vector2i = DEFAULT_RESOLUTION
+var selected_fullscreen: bool = false
+# Archivo de configuracion; los tests usan otro para no tocar el real
+var settings_path: String = ResolutionManager.SETTINGS_PATH
 
 func _ready():
-	print("SettingsMenu _ready() llamado")
-	
-	# Configurar tamaño responsive
-	_setup_responsive_size()
-	
-	# Configurar tamaño del menú
-	custom_minimum_size = Vector2(400, 300)
-	size = custom_minimum_size
-	
-	# Ocultar inicialmente
 	visible = false
-	
-	# Verificar que los nodos existen
-	call_deferred("_verify_and_setup")
-
-func _setup_responsive_size():
-	var screen_size = get_viewport().get_visible_rect().size
-	
-	# Calcular tamaño basado en pantalla
-	var scale_factor = min(screen_size.x / 1360.0, screen_size.y / 768.0)
-	scale_factor = clamp(scale_factor, 0.8, 1.2)
-	
-	# Tamaño base del menú
-	var base_size = Vector2(400, 300)
-	var target_size = base_size * scale_factor
-	
-	# Limitar tamaño
-	target_size.x = clamp(target_size.x, 350, 500)
-	target_size.y = clamp(target_size.y, 250, 400)
-	
-	# Aplicar
-	custom_minimum_size = target_size
-	size = target_size
-	
-	print("Menú ajustado a pantalla:")
-	print("  Pantalla: ", screen_size)
-	print("  Escala: ", scale_factor)
-	print("  Tamaño: ", target_size)
-
-func _verify_and_setup():
-	print("Verificando nodos de UI...")
-	
-	if not _verify_nodes():
-		print("ERROR: Faltan nodos en la UI")
-		_create_fallback_ui()
-	else:
-		print("Todos los nodos encontrados")
-		_setup_ui()
-
-func _verify_nodes() -> bool:
-	# Verificar cada nodo individualmente
-	var nodes_valid = true
-	
-	if not resolution_option:
-		print("ERROR: resolution_option no encontrado")
-		nodes_valid = false
-	
-	if not fullscreen_check:
-		print("ERROR: fullscreen_check no encontrado")
-		nodes_valid = false
-	
-	if not apply_button:
-		print("ERROR: apply_button no encontrado")
-		nodes_valid = false
-	
-	if not close_button:
-		print("ERROR: close_button no encontrado")
-		nodes_valid = false
-	
-	return nodes_valid
-
-func _create_fallback_ui():
-	print("Creando UI de fallback...")
-	
-	# Limpiar todo
-	for child in get_children():
-		child.queue_free()
-	
-	# Crear ColorRect de fondo
-	var color_rect = ColorRect.new()
-	color_rect.name = "ColorRect"
-	color_rect.color = Color(0.1, 0.1, 0.1, 0.95)
-	color_rect.size = size
-	add_child(color_rect)
-	
-	# Panel principal
-	var panel = PanelContainer.new()
-	panel.name = "PanelContainer"
-	panel.size = size
-	color_rect.add_child(panel)
-	
-	# VBoxContainer principal
-	var vbox = VBoxContainer.new()
-	vbox.name = "VBoxContainer"
-	vbox.size = size - Vector2(40, 40)
-	vbox.position = Vector2(20, 20)
-	panel.add_child(vbox)
-	
-	# Título
-	var title = Label.new()
-	title.text = "OPCIONES"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 20)
-	vbox.add_child(title)
-	
-	vbox.add_child(HSeparator.new())
-	
-	# Resolución
-	var res_hbox = HBoxContainer.new()
-	var res_label = Label.new()
-	res_label.text = "Resolución:"
-	res_hbox.add_child(res_label)
-	
-	resolution_option = OptionButton.new()
-	resolution_option.name = "ResolutionOptionButton"
-	resolution_option.custom_minimum_size = Vector2(200, 30)
-	res_hbox.add_child(resolution_option)
-	vbox.add_child(res_hbox)
-	
-	# Fullscreen
-	fullscreen_check = CheckBox.new()
-	fullscreen_check.name = "FullscreenCheckBox"
-	fullscreen_check.text = "Pantalla completa"
-	vbox.add_child(fullscreen_check)
-	
-	vbox.add_child(HSeparator.new())
-	
-	# Botones
-	var buttons_hbox = HBoxContainer.new()
-	buttons_hbox.name = "HBoxContainer"
-	buttons_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	
-	apply_button = Button.new()
-	apply_button.name = "ApplyButton"
-	apply_button.text = "APLICAR"
-	apply_button.custom_minimum_size = Vector2(100, 40)
-	buttons_hbox.add_child(apply_button)
-	
-	close_button = Button.new()
-	close_button.name = "CloseButton"
-	close_button.text = "CERRAR"
-	close_button.custom_minimum_size = Vector2(100, 40)
-	buttons_hbox.add_child(close_button)
-	
-	vbox.add_child(buttons_hbox)
-	
-	print("UI de fallback creada")
-	
-	# Configurar la UI recién creada
-	_setup_ui()
-
-func _setup_ui():
-	print("Configurando UI...")
-	
-	# Cargar resoluciones
 	_load_resolutions()
-	
-	# Conectar señales
+	windowed_button.toggled.connect(_on_mode_toggled.bind(false))
+	fullscreen_button.toggled.connect(_on_mode_toggled.bind(true))
+	resolution_option.item_selected.connect(_on_resolution_selected)
+	volume_slider.value_changed.connect(_on_volume_changed)
+	for level in difficulty_buttons:
+		difficulty_buttons[level].toggled.connect(_on_difficulty_toggled.bind(level))
+	reset_button.pressed.connect(_on_reset_pressed)
 	apply_button.pressed.connect(_on_apply_pressed)
-	close_button.pressed.connect(_on_close_pressed)
-	fullscreen_check.toggled.connect(_on_fullscreen_toggled)
-	
-	#Buss Master
-	var bus_idx = AudioServer.get_bus_index("Master")
-	# Convertimos los Decibelios del sistema a un valor 0.0 - 1.0 para el slider
-	volume_slider.value = db_to_linear(AudioServer.get_bus_volume_db(bus_idx))
-	
-	# Conectamos la señal
-	if not volume_slider.value_changed.is_connected(_on_volume_changed):
-		volume_slider.value_changed.connect(_on_volume_changed)
-	
-	# Cargar configuración
-	_load_settings()
+	close_button.pressed.connect(close)
 
-func _on_volume_changed(value: float):
-	var bus_idx = AudioServer.get_bus_index("Master")
-	# Convertimos el valor 0-1 del slider a Decibelios para el motor
-	AudioServer.set_bus_volume_db(bus_idx, linear_to_db(value))
-	# Mantenemos el bus activo si el volumen es mayor a 0
-	AudioServer.set_bus_mute(bus_idx, value < 0.01)
-
-func _load_resolutions():
-	if not resolution_option:
-		print("ERROR: resolution_option es null")
-		return
-	
-	print("Cargando ", AVAILABLE_RESOLUTIONS.size(), " resoluciones")
-	
+func _load_resolutions() -> void:
+	resolutions.clear()
 	resolution_option.clear()
-	
-	for i in range(AVAILABLE_RESOLUTIONS.size()):
-		var res = AVAILABLE_RESOLUTIONS[i]
-		var text = "%d x %d" % [res.x, res.y]
-		resolution_option.add_item(text, i)
-		print("  Agregada: ", text)
-	
-	# Seleccionar resolución actual
-	_select_current_resolution()
+	# Area util del monitor: sin barra de tareas ni paneles del sistema
+	var usable := DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen()).size
+	for res in AVAILABLE_RESOLUTIONS:
+		# Sin informacion del monitor (por ejemplo, en modo headless) se ofrecen todas
+		var fits := usable.x <= 0 or (res.x <= usable.x and res.y <= usable.y)
+		if fits or res == DEFAULT_RESOLUTION:
+			resolutions.append(res)
+			resolution_option.add_item(resolution_label(res))
 
-func _select_current_resolution():
-	if not resolution_option or resolution_option.item_count == 0:
-		print("ERROR: No hay resoluciones cargadas")
-		return
-	
-	var window = get_tree().root
-	var current_size = window.size
-	
-	print("Tamaño de ventana actual: ", current_size)
-	
-	# Buscar coincidencia
-	var selected_index = 0
-	for i in range(AVAILABLE_RESOLUTIONS.size()):
-		if AVAILABLE_RESOLUTIONS[i] == current_size:
-			selected_index = i
-			print("Coincidencia encontrada en índice: ", i)
-			break
-	
-	resolution_option.selected = selected_index
-	current_resolution = AVAILABLE_RESOLUTIONS[selected_index]
-	
-	print("Resolución seleccionada: ", current_resolution)
+# "1920 x 1080  (16:9)"
+static func resolution_label(res: Vector2i) -> String:
+	return "%d x %d  (%s)" % [res.x, res.y, aspect_name(res)]
 
-func _load_settings():
-	print("Cargando configuración guardada...")
-	
-	var config = ConfigFile.new()
-	var err = config.load("user://settings.cfg")
-	
-	if err == OK:
-		# 1. Cargar Audio
-		var vol = config.get_value("audio", "master_volume", 0.8)
-		var bus_idx = AudioServer.get_bus_index("Master")
-		AudioServer.set_bus_volume_db(bus_idx, linear_to_db(vol))
-		if volume_slider:
-			volume_slider.value = vol
-			
-		# 2. Cargar Pantalla
-		var res_x = config.get_value("display", "resolution_x", 1360)
-		var res_y = config.get_value("display", "resolution_y", 768)
-		current_resolution = Vector2i(res_x, res_y)
-		is_fullscreen = config.get_value("display", "fullscreen", false)
-		
-		print("Configuración cargada: ", current_resolution, ", vol: ", vol)
-	else:
-		# 3. Valores por defecto si no hay archivo
-		print("No se encontró archivo, usando valores por defecto")
-		current_resolution = Vector2i(1360, 768)
-		is_fullscreen = false
-		# El volumen ya tiene su valor por defecto en el AudioServer usualmente
-	
-	# Aplicar cambios visuales a los nodos de la UI
-	call_deferred("_apply_to_ui")
+static func aspect_name(res: Vector2i) -> String:
+	var ratio := float(res.x) / float(res.y)
+	for known in [[16.0 / 9.0, "16:9"], [16.0 / 10.0, "16:10"], [21.0 / 9.0, "21:9"], [4.0 / 3.0, "4:3"]]:
+		# 1360x768 y 2560x1080 no son exactos, pero se los conoce asi
+		if absf(ratio - known[0]) < 0.06:
+			return known[1]
+	return "%.2f:1" % ratio
 
-func _apply_to_ui():
-	if not resolution_option or not fullscreen_check:
-		print("ERROR: No se puede aplicar a UI - nodos null")
-		return
-	
-	# Buscar la resolución actual
-	var found_index = -1
-	for i in range(AVAILABLE_RESOLUTIONS.size()):
-		if AVAILABLE_RESOLUTIONS[i] == current_resolution:
-			found_index = i
-			break
-	
-	if found_index >= 0:
-		resolution_option.selected = found_index
-	else:
-		# Seleccionar primera opción si no se encuentra
-		if resolution_option.item_count > 0:
-			resolution_option.selected = 0
-			current_resolution = AVAILABLE_RESOLUTIONS[0]
-	
-	fullscreen_check.button_pressed = is_fullscreen
-	
-	print("UI actualizada - Res: ", current_resolution, ", FS: ", is_fullscreen)
+# --- Abrir y cerrar ---
 
-func open():
-	print("=== ABRIENDO MENÚ ===")
-	
-	# Si los nodos no están listos, inicializar
-	if not resolution_option:
-		_verify_and_setup()
-		await get_tree().process_frame
-	
+func open() -> void:
+	if not is_node_ready():
+		await ready
+	_sync_from_current()
 	visible = true
-	
-	# Centrar en pantalla
-	var viewport_size = get_viewport().get_visible_rect().size
-	position = (viewport_size - size) / 2
-	
-	# Traer al frente
-	z_index = 1000
-	
-	# Actualizar con valores actuales
-	_select_current_resolution()
-	
-	print("Menú abierto en: ", position)
-	print("=== MENÚ ABIERTO ===")
+	# Aparicion breve: fundido del fondo y del panel
+	modulate.a = 0.0
+	panel.pivot_offset = panel.size / 2.0
+	panel.scale = Vector2(0.96, 0.96)
+	var tween := create_tween().set_parallel(true)
+	tween.tween_property(self, "modulate:a", 1.0, 0.12)
+	tween.tween_property(panel, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	(fullscreen_button if selected_fullscreen else windowed_button).grab_focus()
 
-func close():
-	print("Cerrando menú")
+func close() -> void:
+	if not visible:
+		return
 	visible = false
+	_save_settings()
 	menu_closed.emit()
 
-func _on_apply_pressed():
-	print("Botón APLICAR presionado")
-	
-	if not resolution_option:
-		print("ERROR: resolution_option es null")
+func _input(event: InputEvent) -> void:
+	if visible and event.is_action_pressed("ui_cancel"):
+		close()
+		get_viewport().set_input_as_handled()
+
+# Carga en el menu lo que esta en uso: lo pendiente sin aplicar se descarta
+func _sync_from_current() -> void:
+	selected_resolution = ResolutionManager.current_resolution
+	selected_fullscreen = ResolutionManager.is_fullscreen
+	volume_slider.set_value_no_signal(_current_volume())
+	_update_volume_label(volume_slider.value)
+	_refresh_difficulty()
+	status_label.text = ""
+	_refresh_display_controls()
+
+# --- Pantalla ---
+
+func _on_mode_toggled(pressed: bool, fullscreen: bool) -> void:
+	if not pressed:
 		return
-	
-	# Obtener resolución seleccionada
-	var selected_idx = resolution_option.selected
-	if selected_idx >= 0 and selected_idx < AVAILABLE_RESOLUTIONS.size():
-		current_resolution = AVAILABLE_RESOLUTIONS[selected_idx]
-		print("Resolución seleccionada: ", current_resolution)
-	else:
-		print("ERROR: Índice inválido: ", selected_idx)
+	selected_fullscreen = fullscreen
+	_refresh_display_controls()
+
+func _on_resolution_selected(index: int) -> void:
+	if index >= 0 and index < resolutions.size():
+		selected_resolution = resolutions[index]
+	_refresh_display_controls()
+
+func has_pending_changes() -> bool:
+	if selected_fullscreen != ResolutionManager.is_fullscreen:
+		return true
+	# En pantalla completa la resolucion de la ventana no se usa
+	return not selected_fullscreen and selected_resolution != ResolutionManager.current_resolution
+
+func _refresh_display_controls() -> void:
+	windowed_button.set_pressed_no_signal(not selected_fullscreen)
+	fullscreen_button.set_pressed_no_signal(selected_fullscreen)
+	resolution_option.disabled = selected_fullscreen
+	resolution_option.select(_resolution_index(selected_resolution))
+	var pending := has_pending_changes()
+	apply_button.disabled = not pending
+	if pending:
+		status_label.text = TEXT_PENDING
+	elif status_label.text == TEXT_PENDING:
+		status_label.text = ""
+
+# Indice de la resolucion en la lista; si no esta, la mayor que no la supera
+func _resolution_index(res: Vector2i) -> int:
+	var best := 0
+	for i in range(resolutions.size()):
+		if resolutions[i] == res:
+			return i
+		if resolutions[i].x <= res.x and resolutions[i].y <= res.y:
+			best = i
+	return best
+
+func _on_apply_pressed() -> void:
+	if not has_pending_changes():
 		return
-	
-	# Aplicar configuración
-	_apply_display_settings()
-	
-	# Guardar
+	if not selected_fullscreen:
+		selected_resolution = resolutions[resolution_option.selected]
+	ResolutionManager.set_resolution(selected_resolution, selected_fullscreen)
 	_save_settings()
+	resolution_changed.emit(selected_resolution)
+	_refresh_display_controls()
+	status_label.text = TEXT_APPLIED
+	close_button.grab_focus()
 
-func _on_close_pressed():
-	print("Botón CERRAR presionado")
-	close()
+func _on_reset_pressed() -> void:
+	selected_resolution = DEFAULT_RESOLUTION
+	selected_fullscreen = false
+	volume_slider.value = DEFAULT_VOLUME
+	GlobalConfig.set_bot_difficulty("normal")
+	_refresh_difficulty()
+	_refresh_display_controls()
 
-func _on_fullscreen_toggled(toggled: bool):
-	is_fullscreen = toggled
-	print("Fullscreen: ", is_fullscreen)
+# --- Dificultad ---
 
-func _apply_display_settings():
-	var window = get_tree().root
-	
-	print("Aplicando: ", current_resolution, ", FS: ", is_fullscreen)
-	
-	if not is_fullscreen:
-		window.mode = Window.MODE_WINDOWED
-		window.size = current_resolution
-		
-		# Centrar
-		var screen_size = DisplayServer.screen_get_size()
-		var window_pos = (screen_size - current_resolution) / 2
-		window.position = Vector2i(
-			max(window_pos.x, 0),
-			max(window_pos.y, 0)
-		)
-	else:
-		window.mode = Window.MODE_FULLSCREEN
-		window.set_content_scale_size(current_resolution)
-		window.set_content_scale_mode(Window.CONTENT_SCALE_MODE_CANVAS_ITEMS)
-		window.set_content_scale_aspect(Window.CONTENT_SCALE_ASPECT_KEEP)
-	
-	# Notificar cambio
-	resolution_changed.emit(current_resolution)
+# Rige desde el proximo turno del bot, tambien a mitad de partida
+func _on_difficulty_toggled(pressed: bool, level: String) -> void:
+	if not pressed:
+		return
+	GlobalConfig.set_bot_difficulty(level)
+	_refresh_difficulty()
 
-func _save_settings():
-	var config = ConfigFile.new()
-	
-	config.set_value("display", "resolution_x", current_resolution.x)
-	config.set_value("display", "resolution_y", current_resolution.y)
-	config.set_value("display", "fullscreen", is_fullscreen)
+func _refresh_difficulty() -> void:
+	for level in difficulty_buttons:
+		difficulty_buttons[level].set_pressed_no_signal(level == GlobalConfig.bot_difficulty)
+	difficulty_hint.text = DIFFICULTY_HINTS.get(GlobalConfig.bot_difficulty, "")
+
+# --- Volumen ---
+
+func _on_volume_changed(value: float) -> void:
+	set_master_volume(value)
+	_update_volume_label(value)
+
+func _update_volume_label(value: float) -> void:
+	volume_value.text = "%d%%" % roundi(value * 100.0)
+
+func _current_volume() -> float:
+	var bus := AudioServer.get_bus_index("Master")
+	if AudioServer.is_bus_mute(bus):
+		return 0.0
+	return clampf(db_to_linear(AudioServer.get_bus_volume_db(bus)), 0.0, 1.0)
+
+# Volumen lineal de 0 a 1 sobre el bus Master. En 0 se silencia el bus,
+# porque linear_to_db(0) es -inf.
+static func set_master_volume(value: float) -> void:
+	var bus := AudioServer.get_bus_index("Master")
+	AudioServer.set_bus_mute(bus, value < 0.01)
+	if value >= 0.01:
+		AudioServer.set_bus_volume_db(bus, linear_to_db(value))
+
+# --- Guardado ---
+
+# Guarda lo que esta en uso (no la seleccion pendiente)
+func _save_settings() -> void:
+	var config := ConfigFile.new()
+	config.load(settings_path)  # conserva otras claves si las hay
+	config.set_value("display", "resolution_x", ResolutionManager.current_resolution.x)
+	config.set_value("display", "resolution_y", ResolutionManager.current_resolution.y)
+	config.set_value("display", "fullscreen", ResolutionManager.is_fullscreen)
 	config.set_value("audio", "master_volume", volume_slider.value)
-	
-	var err = config.save("user://settings.cfg")
-	if err == OK:
-		print("Configuración guardada")
-	else:
-		print("Error al guardar: ", err)
-
-func _input(event):
-	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY_ESCAPE and visible:
-			print("ESC - cerrando menú")
-			close()
-			get_viewport().set_input_as_handled()
+	config.set_value("game", "bot_difficulty", GlobalConfig.bot_difficulty)
+	var err := config.save(settings_path)
+	if err != OK:
+		push_error("No se pudo guardar la configuracion: %s" % error_string(err))

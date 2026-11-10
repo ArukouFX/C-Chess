@@ -5,6 +5,7 @@
 [ext_resource type="StyleBox" uid="uid://b5rdhpsfgh0v8" path="res://assets/graphics/programming_style_box_flat.tres" id="3_qi1ob"]
 
 [node name="PogrammingInterface" type="Control"]
+modulate = Color(1, 1, 1, 0.811765)
 layout_mode = 3
 anchors_preset = 8
 anchor_left = 0.5
@@ -39,40 +40,6 @@ theme_override_constants/separation = 16
 layout_mode = 2
 theme_override_constants/separation = 24
 
-[node name="RAMCounter" type="HBoxContainer" parent="UI/MainContainer/LeftPanel"]
-layout_mode = 2
-size_flags_horizontal = 0
-
-[node name="Label" type="Label" parent="UI/MainContainer/LeftPanel/RAMCounter"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0, 0, 0, 1)
-theme_override_colors/font_shadow_color = Color(0.878431, 0.972549, 0.815686, 1)
-theme_override_colors/font_outline_color = Color(0.533333, 0.752941, 0.439216, 1)
-theme_override_font_sizes/font_size = 30
-text = "RAM:"
-
-[node name="RAMUsed" type="Label" parent="UI/MainContainer/LeftPanel/RAMCounter"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.0313726, 0.0941176, 0.12549, 1)
-theme_override_colors/font_shadow_color = Color(0.878431, 0.972549, 0.815686, 1)
-theme_override_colors/font_outline_color = Color(0.533333, 0.752941, 0.439216, 1)
-theme_override_font_sizes/font_size = 30
-
-[node name="Label2" type="Label" parent="UI/MainContainer/LeftPanel/RAMCounter"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.0313726, 0.0941176, 0.12549, 1)
-theme_override_colors/font_shadow_color = Color(0.878431, 0.972549, 0.815686, 1)
-theme_override_colors/font_outline_color = Color(0.533333, 0.752941, 0.439216, 1)
-theme_override_font_sizes/font_size = 30
-text = "/"
-
-[node name="RAMTotal" type="Label" parent="UI/MainContainer/LeftPanel/RAMCounter"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.0313726, 0.0941176, 0.12549, 1)
-theme_override_colors/font_shadow_color = Color(0.878431, 0.972549, 0.815686, 1)
-theme_override_colors/font_outline_color = Color(0.533333, 0.752941, 0.439216, 1)
-theme_override_font_sizes/font_size = 30
-
 [node name="PieceInfo" type="PanelContainer" parent="UI/MainContainer/LeftPanel"]
 layout_mode = 2
 theme_override_styles/panel = ExtResource("3_qi1ob")
@@ -92,6 +59,40 @@ layout_mode = 2
 
 [node name="PieceStatus" type="Label" parent="UI/MainContainer/LeftPanel/PieceInfo/HBoxContainer/VBoxContainer"]
 layout_mode = 2
+
+[node name="RAMCounter" type="HBoxContainer" parent="UI/MainContainer/LeftPanel/PieceInfo/HBoxContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 0
+
+[node name="Label" type="Label" parent="UI/MainContainer/LeftPanel/PieceInfo/HBoxContainer/VBoxContainer/RAMCounter"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_shadow_color = Color(0.878431, 0.972549, 0.815686, 1)
+theme_override_colors/font_outline_color = Color(0.533333, 0.752941, 0.439216, 1)
+theme_override_font_sizes/font_size = 30
+text = "RAM:"
+
+[node name="RAMUsed" type="Label" parent="UI/MainContainer/LeftPanel/PieceInfo/HBoxContainer/VBoxContainer/RAMCounter"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.0313726, 0.0941176, 0.12549, 1)
+theme_override_colors/font_shadow_color = Color(0.878431, 0.972549, 0.815686, 1)
+theme_override_colors/font_outline_color = Color(0.533333, 0.752941, 0.439216, 1)
+theme_override_font_sizes/font_size = 30
+
+[node name="Label2" type="Label" parent="UI/MainContainer/LeftPanel/PieceInfo/HBoxContainer/VBoxContainer/RAMCounter"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.0313726, 0.0941176, 0.12549, 1)
+theme_override_colors/font_shadow_color = Color(0.878431, 0.972549, 0.815686, 1)
+theme_override_colors/font_outline_color = Color(0.533333, 0.752941, 0.439216, 1)
+theme_override_font_sizes/font_size = 30
+text = "/"
+
+[node name="RAMTotal" type="Label" parent="UI/MainContainer/LeftPanel/PieceInfo/HBoxContainer/VBoxContainer/RAMCounter"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.0313726, 0.0941176, 0.12549, 1)
+theme_override_colors/font_shadow_color = Color(0.878431, 0.972549, 0.815686, 1)
+theme_override_colors/font_outline_color = Color(0.533333, 0.752941, 0.439216, 1)
+theme_override_font_sizes/font_size = 30
 
 [node name="TextureRect" type="TextureRect" parent="UI/MainContainer/LeftPanel/PieceInfo/HBoxContainer"]
 layout_mode = 2

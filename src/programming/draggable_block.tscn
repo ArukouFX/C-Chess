@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=3 uid="uid://bm6pixbmp8uem"]
+[gd_scene load_steps=4 format=3 uid="uid://bm6pixbmp8uem"]
 
 [ext_resource type="Script" uid="uid://ccpqewtyqjjgd" path="res://src/programming/draggable_block.gd" id="1_80pff"]
 [ext_resource type="FontFile" uid="uid://c1jvicc2lfsth" path="res://assets/fonts/ConnectionII.otf" id="2_as6ou"]
@@ -16,8 +16,6 @@ corner_radius_bottom_right = 12
 corner_radius_bottom_left = 12
 shadow_size = 4
 shadow_offset = Vector2(3, 3)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_80pff"]
 
 [node name="DraggableBlock" type="TextureRect"]
 custom_minimum_size = Vector2(100, 0)
@@ -62,15 +60,6 @@ theme_override_fonts/font = ExtResource("2_as6ou")
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="BlockName" type="Label" parent="ColorRect/MarginContainer/VBoxContainer/footer"]
-layout_mode = 2
-theme_override_fonts/font = ExtResource("2_as6ou")
-
 [node name="RAMCost" type="Label" parent="ColorRect/MarginContainer/VBoxContainer/footer"]
 layout_mode = 2
 theme_override_fonts/font = ExtResource("2_as6ou")
-
-[node name="Area2D" type="Area2D" parent="."]
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
-shape = SubResource("RectangleShape2D_80pff")

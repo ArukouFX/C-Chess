@@ -4,7 +4,7 @@ extends Node
 var SettingsMenuScene = preload("res://src/ui/menus/SettingsMenu.tscn")
 
 # Referencias
-@onready var settings_button = get_node_or_null("CanvasLayer/SettingsButton")
+@onready var settings_button = get_node_or_null("Buttons/VBoxContainer/SettingsButton")
 @onready var settings_menu = null  # Se creará dinámicamente
 
 func _ready():
@@ -14,9 +14,9 @@ func _ready():
 	
 	# Configurar botón de opciones (crear si no existe)
 	_setup_settings_button()
-	
-	# Cargar configuración inicial
-	_load_initial_settings()
+	ResolutionManager.layout_changed.connect(_place_corner_buttons)
+	# Diferido: el VBoxContainer necesita un cuadro para medir sus botones
+	_place_corner_buttons.call_deferred()
 	
 	print("Juego inicializado")
 	
@@ -33,6 +33,21 @@ func _ready():
 	# Al terminar, ocultamos para que no interfiera con los clics
 	tween.finished.connect(func(): transition_rect.visible = false)
 
+# Atras, Opciones y Salir van a la esquina superior derecha del area visible,
+# no del diseno: en pantallas anchas quedan en el borde real de la ventana
+const CORNER_MARGIN := Vector2(20, 10)
+
+func _place_corner_buttons() -> void:
+	var buttons = get_node_or_null("Buttons")
+	var box = get_node_or_null("Buttons/VBoxContainer")
+	if not buttons or not box:
+		return
+	var rect: Rect2 = ResolutionManager.design_rect()
+	# Esquina superior derecha visible, en coordenadas del mundo (la camara
+	# muestra el diseno desplazado en rect.position)
+	var right := Vector2(ResolutionManager.BASE_SIZE.x, 0) + Vector2(rect.position.x, -rect.position.y)
+	buttons.position = Vector2(right.x - box.size.x - CORNER_MARGIN.x, right.y + CORNER_MARGIN.y)
+
 func _ensure_canvas_layer():
 	# Verificar si CanvasLayer existe
 	var canvas_layer = get_node_or_null("CanvasLayer")
@@ -40,6 +55,8 @@ func _ensure_canvas_layer():
 		print("Creando CanvasLayer dinámicamente...")
 		canvas_layer = CanvasLayer.new()
 		canvas_layer.name = "CanvasLayer"
+		# Por encima de la interfaz de programacion, por debajo de la transicion
+		canvas_layer.layer = 5
 		add_child(canvas_layer)
 		print("CanvasLayer creado")
 	else:
@@ -47,7 +64,7 @@ func _ensure_canvas_layer():
 
 func _setup_settings_button():
 	# Verificar si el botón ya existe
-	settings_button = get_node_or_null("CanvasLayer/SettingsButton")
+	settings_button = get_node_or_null("Buttons/VBoxContainer/SettingsButton")
 	
 	if settings_button:
 		settings_button.pressed.connect(_on_settings_button_pressed)
@@ -61,7 +78,7 @@ func _create_settings_button():
 	
 	var button = Button.new()
 	button.name = "SettingsButton"
-	button.text = "⚙ Opciones"
+	button.text = "Opciones"
 	button.custom_minimum_size = Vector2(120, 40)
 	button.position = Vector2(20, 20)
 	
@@ -96,7 +113,6 @@ func _open_settings_menu():
 			
 			# Conectar señales
 			settings_menu.menu_closed.connect(_on_settings_menu_closed)
-			settings_menu.resolution_changed.connect(_on_resolution_changed)
 			
 			print("Menú de opciones creado")
 		else:
@@ -108,81 +124,3 @@ func _open_settings_menu():
 
 func _on_settings_menu_closed():
 	print("Menú de opciones cerrado")
-
-func _on_resolution_changed(new_resolution: Vector2i):
-	print("Resolución cambiada a: ", new_resolution)
-	
-	# Notificar a otros componentes del juego
-	_notify_resolution_change(new_resolution)
-
-func _notify_resolution_change(resolution: Vector2i):
-	print("Resolución cambiada, notificando componentes...")
-	
-	# Notificar al GameManager
-	var game_manager = get_node_or_null("GameManager")
-	if game_manager and game_manager.has_method("on_resolution_changed"):
-		game_manager.on_resolution_changed(resolution)
-	
-	# Notificar al Board
-	var board = get_node_or_null("Table/Board")
-	if board and board.has_method("on_resolution_changed"):
-		board.on_resolution_changed(resolution)
-	
-	# Notificar a la Cámara
-	var camera = get_node_or_null("Camera/Camera2D")
-	if camera and camera.has_method("on_resolution_changed"):
-		camera.on_resolution_changed(resolution)
-	
-	# Notificar a la Programming Interface si está abierta
-	var canvas_layer = get_node_or_null("CanvasLayer")
-	if canvas_layer:
-		for child in canvas_layer.get_children():
-			if child is ProgrammingInterface and child.visible:
-				if child.has_method("_on_resolution_changed"):
-					child._on_resolution_changed(resolution)
-					print("Programming Interface notificada del cambio")
-
-func _load_initial_settings():
-	# Cargar configuración guardada o usar valores por defecto
-	var config = ConfigFile.new()
-	var err = config.load("user://settings.cfg")
-	
-	if err == OK:
-		# Resolución
-		var res_x = config.get_value("display", "resolution_x", 1360)
-		var res_y = config.get_value("display", "resolution_y", 768)
-		var resolution = Vector2i(res_x, res_y)
-		
-		# Fullscreen
-		var fullscreen = config.get_value("display", "fullscreen", false)
-		
-		# Aplicar
-		_apply_resolution(resolution, fullscreen)
-	else:
-		# Valores por defecto
-		_apply_resolution(Vector2i(1360, 768), false)
-
-func _apply_resolution(resolution: Vector2i, fullscreen: bool):
-	var window = get_tree().root
-	
-	if fullscreen:
-		window.mode = Window.MODE_FULLSCREEN
-		window.set_content_scale_size(resolution)
-		window.set_content_scale_mode(Window.CONTENT_SCALE_MODE_CANVAS_ITEMS)
-		window.set_content_scale_aspect(Window.CONTENT_SCALE_ASPECT_KEEP)
-	else:
-		window.mode = Window.MODE_WINDOWED
-		window.size = resolution
-		
-		# Centrar
-		var screen_size = DisplayServer.screen_get_size()
-		var window_pos = (screen_size - resolution) / 2
-		window.position = Vector2i(
-			max(window_pos.x, 0),
-			max(window_pos.y, 0)
-		)
-	
-	print("Resolución inicial aplicada: %dx%d, Fullscreen: %s" % [
-		resolution.x, resolution.y,
-		"Sí" if fullscreen else "No"
-	])

@@ -1,207 +1,171 @@
 extends Sprite2D
 
-signal released(piece, world_position)
-signal right_clicked(piece)
+# Se emite al hacer clic (boton izquierdo) sobre la pieza para programarla
+signal selected(piece)
 
-var virtual_board_position: Vector2
+# Fraccion de la casilla que ocupa la pieza. Con texturas de 160 px y celdas
+# de 80 px equivale a la escala de 0.4375 que se usaba antes (70 px).
+const CELL_FILL := 0.875
+const DEFAULT_CELL_SIZE := 80.0
+
+# Escala de reposo calculada por fit_to_cell. El pulso del contenedor Pieces
+# la multiplica sin acumularse.
+var base_scale: Vector2 = Vector2.ONE
+
+# Resaltado de la pieza que se esta programando
+const SELECTION_COLOR := Color(1.0, 0.82, 0.25)
+const SELECTION_WIDTH := 4.0  # grosor del borde en pixeles de pantalla
+var is_selected: bool = false
+var _cell_size: float = DEFAULT_CELL_SIZE
+
 var piece_id: String = ""
 var piece_type: String = ""
 var piece_color: String = ""
-var original_modulate: Color = Color.WHITE
 
-#Defensa
-# Protocolo defensivo
-var defense_protocol = null
-var defense_protocol_used = false
+# Posicion en el tablero. board_position es la fuente de verdad; la virtual
+# se mantiene por compatibilidad y siempre deberia coincidir.
+var board_position: Vector2 = Vector2.ZERO
+var virtual_board_position: Vector2
 
-# Sistema de programación
+# Sistema de programacion
 var available_ram: int = 0
-var used_ram: int = 0
 var behavior_script: Array = []
 var is_programmed: bool = false
-var board_position: Vector2 = Vector2.ZERO
 var program_execution_index: int = 0
 
-var is_unstable: bool = false
-
-var current_ram_usage: int = 0
-
-#defense
+# Protocolo de escape. Es de un solo uso: tras un escape exitoso se consume,
+# salvo que sea permanente (los que asignan los desafios).
+var defense_protocol = null
 var defense_protocol_id := ""
 var defense_protocol_active := false
 var defense_protocol_owner_turn := ""
+var defense_protocol_permanent := false
 
 func _ready():
 	$Area2D.input_event.connect(_on_area_2d_input_event)
 	$Area2D.monitoring = true
 	$Area2D.input_pickable = true
-	
-	# Configurar escala ORIGINAL (la que tenías antes)
-	self.scale = Vector2(0.4375, 0.4375)  # ← ESCALA ORIGINAL
-	
-	# Configurar la forma de colisión
-	var shape = RectangleShape2D.new()
-	shape.extents = texture.get_size() * 0.4375 / 2 if texture else Vector2(35, 35)
-	$Area2D/CollisionShape2D.shape = shape
-	$Area2D/CollisionShape2D.position = Vector2.ZERO
 
 func setup_piece(tex: Texture2D, color: String, type: String, board_pos: Vector2) -> void:
-	virtual_board_position = board_pos
 	texture = tex
 	centered = true
 	piece_color = color
 	piece_type = type
 	board_position = board_pos
-	original_modulate = Color.WHITE
-	
-	# --- NUEVO: Generar ID Único ---
-	# Ejemplo: "white_pawn_0_1"
+	virtual_board_position = board_pos
+
+	# ID unico basado en la posicion inicial, por ejemplo "white_pawn_0_6"
 	piece_id = "%s_%s_%d_%d" % [color, type, int(board_pos.x), int(board_pos.y)]
-	
-	# --- RAM Init ---
-	if BlockSystem and BlockSystem.has_method("get_piece_ram_capacity"):
-		available_ram = BlockSystem.get_piece_ram_capacity(type)
-	else:
-		var default_ram = {"pawn": 8, "horse": 16, "bishop": 20, "tower": 24, "queen": 32, "king": 12}
-		available_ram = default_ram.get(type, 8)
-	
-	used_ram = 0
+
+	available_ram = BlockSystem.get_piece_ram_capacity(type)
 	behavior_script = []
 	is_programmed = false
-	
-	# Configurar escala FIJA
-	self.scale = Vector2(0.4375, 0.4375)  # ← ESCALA FIJA ORIGINAL
-	
-	# Configurar Area2D con tamaño CORRECTO para la escala
+
+	fit_to_cell(DEFAULT_CELL_SIZE)
+
+# Ajusta escala y zona de clic al tamano de casilla del tablero
+func fit_to_cell(cell_size: float) -> void:
+	_cell_size = cell_size
+	var shape := RectangleShape2D.new()
+	if texture:
+		var tex_size := texture.get_size()
+		var target := cell_size * CELL_FILL
+		base_scale = Vector2.ONE * (target / max(tex_size.x, tex_size.y))
+		# La forma es hija del sprite y ya hereda su escala: se usa el tamano
+		# de la textura sin escalar para que la zona de clic cubra toda la pieza
+		shape.size = tex_size
+	else:
+		base_scale = Vector2.ONE
+		shape.size = Vector2(cell_size, cell_size) * CELL_FILL
+	scale = base_scale
 	$Area2D.position = Vector2.ZERO
-	var shape = RectangleShape2D.new()
-	shape.extents = tex.get_size() * 0.4375 / 2 if tex else Vector2(35, 35)
 	$Area2D/CollisionShape2D.shape = shape
 	$Area2D/CollisionShape2D.position = Vector2.ZERO
+	queue_redraw()
 
+func set_selected(value: bool) -> void:
+	if is_selected == value:
+		return
+	is_selected = value
+	queue_redraw()
 
-# Esta función se llamará desde la ProgrammingInterface al darle a "Guardar"
-func save_program_to_manager(new_script: Array):
-	update_programming(new_script) # Actualiza la pieza localmente
-	
-	var gm = get_node_or_null("/root/Main/GameManager")
-	if gm and gm.has_method("save_piece_program"):
-		gm.save_piece_program(piece_id, new_script)
+# Borde alrededor de la casilla de la pieza seleccionada. Se dibuja en el
+# espacio local del sprite (escalado), asi que tamano y grosor se dividen por
+# la escala para que en pantalla midan una casilla y SELECTION_WIDTH pixeles.
+func _draw() -> void:
+	if not is_selected:
+		return
+	var s: float = max(scale.x, 0.001)
+	var lado: float = _cell_size / s
+	var grosor: float = SELECTION_WIDTH / s
+	var rect := Rect2(Vector2(-lado, -lado) / 2.0, Vector2(lado, lado)).grow(-grosor / 2.0)
+	draw_rect(rect, SELECTION_COLOR, false, grosor)
 
-func update_world_position(new_world_pos: Vector2):
-	position = new_world_pos
-	global_position = new_world_pos
-
-func _handle_right_click():
-	print("Right click on piece for programming: ", piece_type)
-	var game_manager = get_node_or_null("/root/Main/GameManager")
-	if game_manager and game_manager.has_method("_on_piece_right_clicked"):
-		game_manager._on_piece_right_clicked(self)
-	else:
-		print("GameManager not available for programming")
+# Llamado por el contenedor Pieces: escala sobre el centro de la pieza, asi
+# que nunca se mueve de su casilla
+func apply_pulse(factor: float) -> void:
+	scale = base_scale * factor
 
 func get_programming_status() -> String:
 	if behavior_script.is_empty():
 		return "No program"
-	else:
-		var block_count = behavior_script.size()
-		if BlockSystem and BlockSystem.has_method("calculate_ram_usage"):
-			var ram_used = BlockSystem.calculate_ram_usage(behavior_script)
-			return "%d block%s (%d/%d RAM)" % [block_count, "s" if block_count != 1 else "", ram_used, available_ram]
-		return "%d blocks" % block_count
-
-func update_programming(new_script: Array):
-	behavior_script = new_script
-	if BlockSystem and BlockSystem.has_method("calculate_ram_usage"):
-		used_ram = BlockSystem.calculate_ram_usage(new_script)
-	else:
-		# Calcular manualmente
-		used_ram = 0
-		for block in new_script:
-			if block is Dictionary and block.has("ram_cost"):
-				used_ram += block["ram_cost"]
-	
-	is_programmed = not new_script.is_empty()
-	print("Piece programmed: ", piece_type, " - RAM: ", used_ram, "/", available_ram, " - Blocks: ", new_script.size())
+	var block_count = behavior_script.size()
+	var ram_used = BlockSystem.calculate_ram_usage(behavior_script)
+	return "%d block%s (%d/%d RAM)" % [block_count, "s" if block_count != 1 else "", ram_used, available_ram]
 
 func reset_execution():
 	program_execution_index = 0
 
-func execute_next_command():
-	if program_execution_index < behavior_script.size():
-		var block_data = behavior_script[program_execution_index]
-		
-		if BlockSystem and BlockSystem.has_method("get_block_info"):
-			var block_info = BlockSystem.get_block_info(block_data.get("type", ""))
-			
-			if block_info and block_info.has("execute"):
-				# PASAMOS block_data (que contiene el "type") como segundo argumento
-				var result = await block_info["execute"].call(self, block_data)
-				
-				# Si el resultado dice stop, terminamos
-				if result is Dictionary and result.get("stop_execution", false):
-					program_execution_index = behavior_script.size()
-					return result
-				
-				program_execution_index += 1
-				return result
+func execute_next_command() -> Dictionary:
+	if program_execution_index >= behavior_script.size():
+		return {"action": "end_of_program", "stop_execution": true}
 
-func _on_area_2d_input_event(viewport, event, shape_idx):
-	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-			print("Right click - Opening programming for: ", piece_type)
-			emit_signal("right_clicked", self)
-			get_viewport().set_input_as_handled()
+	var block_data = behavior_script[program_execution_index]
+	var block_type = block_data.get("type", "") if block_data is Dictionary else ""
+	var block_info = BlockSystem.get_block_info(block_type)
 
-func capture():
-	print("Pieza ", piece_id, " capturada y removida.")
-	# Aquí podrías añadir una animación de explosión o desvanecimiento
-	queue_free()
+	if block_info.is_empty() or not block_info.has("execute"):
+		push_warning("Bloque desconocido o sin ejecucion en " + piece_id + ": " + block_type)
+		program_execution_index = behavior_script.size()
+		return {"action": "unknown_block", "stop_execution": true}
+
+	# block_data (que contiene el "type") se pasa como segundo argumento
+	var result = await block_info["execute"].call(self, block_data)
+	if not result is Dictionary:
+		result = {"action": "error", "stop_execution": true}
+
+	if result.get("stop_execution", false):
+		program_execution_index = behavior_script.size()
+	else:
+		program_execution_index += 1
+	return result
 
 func has_more_commands() -> bool:
 	return program_execution_index < behavior_script.size() - 1
 
-#Protocolo de inestabilidad
-func check_instability() -> Dictionary:
-	var used_ram = BlockSystem.calculate_ram_usage(
-		behavior_script
-	)
-	if used_ram <= available_ram:
-		return {
-			"stable": true
-		}
-	print("PROTOCOLO DE INESTABILIDAD ACTIVADO")
-	
-	var roll = randi_range(1, 100)
-	
-	if roll <= 80:
-		print("FALLO DE EJECUCIÓN")
-		return {
-			"stable": false,
-			"result": "failure"
-		}
-	print("COLAPSO CRÍTICO")
-	return {
-		"stable": false,
-		"result": "explode"
-	}
+func _on_area_2d_input_event(_viewport, event, _shape_idx):
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			selected.emit(self)
+			get_viewport().set_input_as_handled()
 
-# Funciones de defensa
-func install_defense_protocol(protocol_type: String):
-	defense_protocol = {
-		"type": protocol_type
-	}
-	print("Protocolo instalado:", protocol_type)
+# Quita el escape despues de usarlo. Los permanentes se conservan.
+func consume_defense_protocol() -> void:
+	if defense_protocol_permanent:
+		return
+	clear_defense_protocol()
 
-func has_defense_protocol() -> bool:
-	return defense_protocol != null
+func clear_defense_protocol() -> void:
+	defense_protocol = null
+	defense_protocol_id = ""
+	defense_protocol_active = false
+	defense_protocol_owner_turn = ""
+	defense_protocol_permanent = false
 
-func activate_defense_protocol() -> bool:
-	if defense_protocol_used:
-		return false
-	defense_protocol_used = true
-	print("DEFENSE PROTOCOL ACTIVATED: ", piece_id)
-	return true
+# Fuerza la sincronizacion entre posicion logica y virtual
+func sync_positions():
+	virtual_board_position = board_position
 
-func get_defense_protocol():
-	return defense_protocol
+# Valida que esta pieza tenga datos minimos para ser considerada en colisiones
+func is_valid_piece() -> bool:
+	return piece_id != "" and piece_type != "" and piece_color != ""

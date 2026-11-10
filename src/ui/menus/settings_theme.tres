@@ -1,0 +1,170 @@
+[gd_resource type="Theme" load_steps=18 format=3 uid="uid://dujmo0ivcejin"]
+
+[ext_resource type="FontFile" uid="uid://c1jvicc2lfsth" path="res://assets/fonts/ConnectionII.otf" id="1_font"]
+
+[sub_resource type="StyleBoxFlat" id="btn_disabled"]
+content_margin_left = 16.0
+content_margin_top = 6.0
+content_margin_right = 16.0
+content_margin_bottom = 6.0
+bg_color = Color(0.031, 0.094, 0.125, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.204, 0.408, 0.337, 1)
+
+[sub_resource type="StyleBoxFlat" id="focus"]
+draw_center = false
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.878, 0.973, 0.816, 1)
+expand_margin_left = 4.0
+expand_margin_top = 4.0
+expand_margin_right = 4.0
+expand_margin_bottom = 4.0
+
+[sub_resource type="StyleBoxFlat" id="btn_hover"]
+content_margin_left = 16.0
+content_margin_top = 6.0
+content_margin_right = 16.0
+content_margin_bottom = 6.0
+bg_color = Color(0.533, 0.753, 0.439, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.878, 0.973, 0.816, 1)
+
+[sub_resource type="StyleBoxFlat" id="btn_pressed"]
+content_margin_left = 16.0
+content_margin_top = 6.0
+content_margin_right = 16.0
+content_margin_bottom = 6.0
+bg_color = Color(0.878, 0.973, 0.816, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.878, 0.973, 0.816, 1)
+
+[sub_resource type="StyleBoxFlat" id="btn_normal"]
+content_margin_left = 16.0
+content_margin_top = 6.0
+content_margin_right = 16.0
+content_margin_bottom = 6.0
+bg_color = Color(0.204, 0.408, 0.337, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.533, 0.753, 0.439, 1)
+
+[sub_resource type="StyleBoxLine" id="separator"]
+color = Color(0.204, 0.408, 0.337, 1)
+thickness = 2
+
+[sub_resource type="Gradient" id="grab_color"]
+colors = PackedColorArray(0.533, 0.753, 0.439, 1, 0.533, 0.753, 0.439, 1)
+
+[sub_resource type="GradientTexture2D" id="grabber"]
+gradient = SubResource("grab_color")
+width = 14
+height = 26
+
+[sub_resource type="Gradient" id="grab_hover_color"]
+colors = PackedColorArray(0.878, 0.973, 0.816, 1, 0.878, 0.973, 0.816, 1)
+
+[sub_resource type="GradientTexture2D" id="grabber_hover"]
+gradient = SubResource("grab_hover_color")
+width = 14
+height = 26
+
+[sub_resource type="StyleBoxFlat" id="slider_fill"]
+content_margin_top = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(0.533, 0.753, 0.439, 1)
+
+[sub_resource type="StyleBoxFlat" id="slider_fill_hover"]
+content_margin_top = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(0.878, 0.973, 0.816, 1)
+
+[sub_resource type="StyleBoxFlat" id="slider"]
+content_margin_top = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(0.204, 0.408, 0.337, 1)
+
+[sub_resource type="StyleBoxFlat" id="panel"]
+content_margin_left = 32.0
+content_margin_top = 24.0
+content_margin_right = 32.0
+content_margin_bottom = 24.0
+bg_color = Color(0.031, 0.094, 0.125, 1)
+border_width_left = 4
+border_width_top = 4
+border_width_right = 4
+border_width_bottom = 4
+border_color = Color(0.533, 0.753, 0.439, 1)
+shadow_color = Color(0, 0, 0, 0.45)
+shadow_offset = Vector2(8, 8)
+
+[sub_resource type="StyleBoxFlat" id="popup_hover"]
+bg_color = Color(0.204, 0.408, 0.337, 1)
+
+[sub_resource type="StyleBoxFlat" id="popup_panel"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(0.031, 0.094, 0.125, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.533, 0.753, 0.439, 1)
+
+[resource]
+default_font = ExtResource("1_font")
+default_font_size = 20
+Button/colors/font_color = Color(0.878, 0.973, 0.816, 1)
+Button/colors/font_disabled_color = Color(0.204, 0.408, 0.337, 1)
+Button/colors/font_focus_color = Color(0.878, 0.973, 0.816, 1)
+Button/colors/font_hover_color = Color(0.031, 0.094, 0.125, 1)
+Button/colors/font_hover_pressed_color = Color(0.031, 0.094, 0.125, 1)
+Button/colors/font_pressed_color = Color(0.031, 0.094, 0.125, 1)
+Button/styles/disabled = SubResource("btn_disabled")
+Button/styles/focus = SubResource("focus")
+Button/styles/hover = SubResource("btn_hover")
+Button/styles/hover_pressed = SubResource("btn_pressed")
+Button/styles/normal = SubResource("btn_normal")
+Button/styles/pressed = SubResource("btn_pressed")
+HSeparator/constants/separation = 8
+HSeparator/styles/separator = SubResource("separator")
+HSlider/icons/grabber = SubResource("grabber")
+HSlider/icons/grabber_disabled = SubResource("grabber")
+HSlider/icons/grabber_highlight = SubResource("grabber_hover")
+HSlider/styles/grabber_area = SubResource("slider_fill")
+HSlider/styles/grabber_area_highlight = SubResource("slider_fill_hover")
+HSlider/styles/slider = SubResource("slider")
+Label/colors/font_color = Color(0.878, 0.973, 0.816, 1)
+OptionButton/colors/font_color = Color(0.878, 0.973, 0.816, 1)
+OptionButton/colors/font_disabled_color = Color(0.204, 0.408, 0.337, 1)
+OptionButton/colors/font_focus_color = Color(0.878, 0.973, 0.816, 1)
+OptionButton/colors/font_hover_color = Color(0.031, 0.094, 0.125, 1)
+OptionButton/colors/font_pressed_color = Color(0.031, 0.094, 0.125, 1)
+OptionButton/styles/disabled = SubResource("btn_disabled")
+OptionButton/styles/focus = SubResource("focus")
+OptionButton/styles/hover = SubResource("btn_hover")
+OptionButton/styles/normal = SubResource("btn_normal")
+OptionButton/styles/pressed = SubResource("btn_pressed")
+PanelContainer/styles/panel = SubResource("panel")
+PopupMenu/colors/font_color = Color(0.878, 0.973, 0.816, 1)
+PopupMenu/colors/font_hover_color = Color(0.878, 0.973, 0.816, 1)
+PopupMenu/constants/v_separation = 8
+PopupMenu/font_sizes/font_size = 20
+PopupMenu/fonts/font = ExtResource("1_font")
+PopupMenu/styles/hover = SubResource("popup_hover")
+PopupMenu/styles/panel = SubResource("popup_panel")

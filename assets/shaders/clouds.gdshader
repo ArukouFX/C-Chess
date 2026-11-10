@@ -25,16 +25,16 @@ float random(vec2 st) {
 float noise(vec2 st) {
     vec2 i = floor(st);
     vec2 f = fract(st);
-    
+
     float a = random(i);
     float b = random(i + vec2(1.0, 0.0));
     float c = random(i + vec2(0.0, 1.0));
     float d = random(i + vec2(1.0, 1.0));
-    
+
     vec2 u = f * f * (3.0 - 2.0 * f);
-    
-    return mix(a, b, u.x) + 
-           (c - a) * u.y * (1.0 - u.x) + 
+
+    return mix(a, b, u.x) +
+           (c - a) * u.y * (1.0 - u.x) +
            (d - b) * u.x * u.y;
 }
 
@@ -67,23 +67,23 @@ void fragment() {
     // Aplicar baja resolución PS1 (primero el vertex snapping)
     vec2 ps1_uv = vertex_snap(UV, vertex_snap_intensity);
     ps1_uv = apply_ps1_resolution(ps1_uv, ps1_resolution);
-    
+
     vec2 uv = ps1_uv * cloud_scale;
-    
+
     // Movimiento con el tiempo
     uv.x += TIME * speed * 0.1;
     uv.y += TIME * speed * 0.05;
-    
+
     // Generar nubes con múltiples capas de ruido
     float clouds = 0.0;
     clouds += noise(uv) * 0.5;
     clouds += noise(uv * 2.0 + TIME * 0.2) * 0.25;
     clouds += noise(uv * 4.0 - TIME * 0.1) * 0.125;
-    
+
     // Ajustar suavidad y contraste
     clouds = smoothstep(0.3, 0.7, clouds);
     clouds = pow(clouds, softness);
-    
+
     // Aplicar paleta Gameboy
     COLOR = apply_gameboy_palette_smooth(clouds);
 }

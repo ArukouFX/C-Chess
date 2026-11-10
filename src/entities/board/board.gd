@@ -4,20 +4,22 @@ extends Node2D  # Este es el nodo Board en Main/Table/Board
 @export var board_size: Vector2 = Vector2(8, 8)
 
 # Sistema de posicionamiento
+# Convencion de coordenadas: la celda (0,0) es la esquina superior izquierda
+# en pantalla (negras arriba, blancas abajo). Y crece hacia abajo y no se
+# invierte en ninguna conversion.
 var cell_size: float = 80.0
+# board_origin y board_center estan en el espacio del nodo padre (Table), NO
+# en coordenadas globales. Para convertir entre celdas y pantalla usar
+# cell_to_global() y global_to_cell().
 var board_origin: Vector2 = Vector2.ZERO
 var board_center: Vector2 = Vector2.ZERO
 
 func _ready():
 	print("=== TABLERO REAL INICIALIZADO ===")
 	
-	# Escuchar cambios de resolución
-	var main = get_node_or_null("/root/Main")
-	if main and main.has_signal("resolution_changed"):
-		main.resolution_changed.connect(_on_resolution_changed)
-	
-	# Posicionar inicialmente
-	update_board_for_resolution(get_viewport().get_visible_rect().size)
+	# El tablero se ubica siempre sobre el diseno de 1360x768. Si el area
+	# visible es mayor, la camara centra ese diseno (ver camera_2d.gd)
+	update_board_for_resolution(Vector2(ResolutionManager.BASE_SIZE))
 	
 	# Configurar Area2D para todo el tablero
 	_setup_area2d()
@@ -33,10 +35,6 @@ func _setup_area2d():
 			var collision = area.get_node("CollisionShape2D")
 			collision.shape = shape
 			collision.position = total_size / 2  # Centrar la forma de colisión
-
-func _on_resolution_changed(new_resolution: Vector2i):
-	print("Board: Resolución cambiada a ", new_resolution)
-	update_board_for_resolution(Vector2(new_resolution))
 
 func update_board_for_resolution(screen_size: Vector2):
 	print("Actualizando tablero real para: ", screen_size)
@@ -79,32 +77,23 @@ func update_board_for_resolution(screen_size: Vector2):
 	print("  Tamaño celda: ", cell_size)
 	print("  Tamaño total: ", board_total_size)
 
-func calculate_cell_size(screen_size: Vector2) -> float:
-	var base_height = 768.0
-	var scale_factor = screen_size.y / base_height
-	scale_factor = clamp(scale_factor, 0.8, 1.2)
-	return base_cell_size * scale_factor
+# El tamano de celda es fijo: el escalado a la ventana lo hace Godot
+func calculate_cell_size(_screen_size: Vector2) -> float:
+	return base_cell_size
 
-func get_board_origin() -> Vector2:
-	return board_origin
+# Centro de una celda en coordenadas globales. Respeta la transformacion de
+# Table y del propio tablero, asi que no depende de sus desplazamientos.
+func cell_to_global(cell: Vector2) -> Vector2:
+	return to_global(Vector2(
+		cell.x * cell_size + cell_size / 2.0,
+		cell.y * cell_size + cell_size / 2.0
+	))
 
+# Inversa exacta de cell_to_global. Puede devolver celdas fuera del tablero
+# (por ejemplo (-1, 3)); usar is_inside_board() para validarlas.
+func global_to_cell(global_pos: Vector2) -> Vector2i:
+	var local := to_local(global_pos)
+	return Vector2i(int(floor(local.x / cell_size)), int(floor(local.y / cell_size)))
 
-func get_world_position_from_cell(cell_coord: Vector2) -> Vector2:
-	"""Convierte coordenadas de celda a posición mundial"""
-	
-	return board_origin + Vector2(
-		cell_coord.x * cell_size + (cell_size / 2),
-		cell_coord.y * cell_size + (cell_size / 2)  # SIN INVERTIR
-	)
-
-func get_cell_coord(world_pos: Vector2) -> Vector2:
-	"""Obtiene coordenadas de celda desde posición mundial"""
-	var local_pos = world_pos - board_origin
-	
-	var cell_x = floor(local_pos.x / cell_size)
-	var cell_y = floor(local_pos.y / cell_size)
-	
-	# Invertir Y para obtener coordenadas de ajedrez
-	var chess_y = (board_size.y - 1) - cell_y
-	
-	return Vector2(cell_x, chess_y)
+func is_inside_board(cell: Vector2i) -> bool:
+	return cell.x >= 0 and cell.y >= 0 and cell.x < int(board_size.x) and cell.y < int(board_size.y)

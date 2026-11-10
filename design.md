@@ -60,3 +60,9 @@ The game depends on several Godot modules and features, including:
 
 ## Conclusion
 This architecture provides a clear separation of concerns, making it easier to manage and extend the game. Each component is responsible for a specific aspect of the game, and changes can be made to individual components without affecting the rest of the game.
+
+## Reglas de Desarrollo (IA)
+1. **Solo GDScript:** Escribir código únicamente en archivos `.gd`.
+2. **NUNCA tocar escenas:** No crear ni modificar archivos `.tscn`. La IA no debe intentar enlazar nodos, el desarrollador lo hará manualmente en el editor de Godot.
+3. **Tipado Estático:** Usar tipado estricto en variables y retornos de funciones (ej. `var speed: float = 100.0`, `func move() -> void:`).
+4. **Respetar Arquitectura:** Las nuevas piezas deben heredar e integrarse con `entities/pieces/piece.gd`.
