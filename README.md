@@ -1,250 +1,169 @@
-# ♟️ C-Chess: Ajedrez Programable / Programmable Chess
+# C-Chess: Ajedrez Programable / Programmable Chess
 
----
-<div align="center">
-    <h1>English Version</h1>
-</div>
-
-
-# ♟️ C-Chess: Programmable Chess
-
-**C-Chess** is a turn-based strategy project developed in **Godot Engine 4.x** that combines classic chess mechanics with an innovative **programmable block system**.
-
-The goal is to explore how **visual programming and modular logic** can be integrated to give each piece an autonomous and customizable behavior.
+[English](#english-version) | [Español](#versión-en-español)
 
 ---
 
-## 🧠 Block System (BlockSystem)
+## English Version
 
-This is the project's central logic engine. It functions as an interpreter that:
-* Defines and manages action blocks (move, capture, conditions, etc.).
-* Assigns virtual resource limits (**"RAM"**) to each piece.
-* Allows the creation of **visual scripts** (sequences of blocks) that pieces execute automatically on their turn.
+**C-Chess** is an educational, turn-based strategy game built with **Godot Engine 4.3** (Blazium 4.3.2). Instead of moving pieces directly, players **program** each piece with visual blocks, similar to Scratch. Every piece has a limited amount of memory (**RAM**), so players must plan, sequence and compress their programs.
 
-This enables programmable chess where strategies are defined at a modular code level.
+The project was developed as a final degree project (TCC). Its goal is to practice **computational thinking**: sequencing, abstraction (loops), resource management and debugging, inside a familiar game.
 
----
+### Game modes
 
-## 🧩 Project Structure
+- **Play against the bot**, with three difficulty levels (Easy, Normal, Hard).
+- **Local multiplayer**: two players on the same computer.
+- **Tutorial**: 9 guided levels that introduce each rule.
+- **Challenges**: 5 puzzles, from RAM compression to checkmate.
 
-### 🎮 Main Scene (`Main.tscn`)
+### How to play
 
-Contains the fundamental nodes that orchestrate the game:
+1. Click one of your pieces to open the programming interface.
+2. Drag movement blocks into the workspace. The board shows a **preview** of the path: each step is numbered, captures are marked in red and invalid moves with a cross.
+3. Press **Execute**. The piece runs its program and the turn passes to the opponent.
+4. Capture the enemy king to win.
 
-* **`_GameManager`**: Core logic (turn management, victory conditions, etc.).
-* **`_Table`**: Representation of the chessboard.
-* **`_Pieces`**: Contains and manages all pieces in play.
-* **`_Turn`**: Controls and displays the current turn.
-* **`_BackGround`**: Visual background of the board.
-* **`_CanvasLayer`**: Layer for the User Interface (UI).
-* **`_Camera`**: Main scene camera.
-* **`_Music`**: Background music controller.
-* **`_Node (test_block.gd)`**: Auxiliary node used for testing the block system.
+### Rules
 
----
+**RAM per piece.** Every piece uses the same eight movement blocks. They differ only in memory:
 
-### 🧱 Secondary Scene (`Board.tscn`)
+| Piece | Pawn | King | Knight | Bishop | Rook | Queen |
+|---|---|---|---|---|---|---|
+| RAM | 8 | 12 | 16 | 20 | 24 | 32 |
 
-Defines the playing area and its interactions:
+**Incremental cost.** A block costs its base value (2 for straight moves, 3 for diagonals) plus 1 for each block placed before it. Three "Forward" blocks cost 2 + 3 + 4 = 9.
 
-* **`_Board`**: Main board node.
-    * `Sprite2D`: Graphical representation.
-    * `Area2D`: Detects interactions and collisions.
-    * `CollisionShape2D`: Defines the physical interaction area.
+**Loops.** A loop groups a sequence into a single block. It costs what its contents cost and takes only one place in the queue, so long sequences become cheaper. Loops can be nested.
 
----
+**Escape protocol.** A one-use protection. When the piece is about to be captured, it moves one block away. The escape fails if the destination is occupied or outside the board.
 
-## ⚙️ Key Scripts
+**Execution.** Leaving the board or running into an ally stops the program. A capture ends it. The knight is the only piece that can pass over allies, but it cannot end its move on one.
 
-### `test_block.gd`
+### Running the project
 
-Testing script focused on verifying the functionality of the **BlockSystem**:
+1. Install **Godot 4.3** or **Blazium 4.3.2**.
+2. Clone the repository and open `project.godot`.
+3. Press **Run**. The game starts at the main menu (`src/ui/menus/MainMenu.tscn`).
 
-* **Testable Features:**
-    * Get block information (`get_block_info`).
-    * Filtering by categories (`get_blocks_by_category`).
-    * Piece RAM capacity (`get_piece_ram_capacity`).
-    * Script RAM usage calculation (`calculate_ram_usage`).
-    * Script validation (`is_script_valid`).
+### Tests
 
-* **Test Script Example:**
-    ```gdscript
-    var test_script = [
-        {"type": "move_forward"},
-        {"type": "if_enemy_front"}, 
-        {"type": "capture"}
-    ]
-    ```
+The project includes 188 automated tests written with [GUT](https://github.com/bitwes/Gut), located in `src/test/unit/`. They cover the block system, the bot, challenges, menus and full simulated games. One test also checks that the path preview always matches the real execution.
 
-### `turn_display.gd`
+Run them from the GUT panel in the editor, or from the command line:
 
-Controls the visualization and animation of the current turn:
+```bash
+godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://src/test/unit -gexit
+```
 
-* Shows which player has the turn (**white** or **black**).
-* Applies a cyclical visual animation to add dynamism to the turn indicator.
+### Project structure
 
-* **Update Function:**
-    ```gdscript
-    func update_turn(turn: String):
-        if turn == "white":
-            texture = load("res://Assets/turn-white.png")
-        else:
-            texture = load("res://Assets/turn-black.png")
-    ```
+```
+src/
+  core/          Game manager, global configuration, saving, music, resolution
+  entities/      Board, pieces and the path preview
+  programming/   Block system, draggable blocks, program simulation
+  IA/            Bot (threat map, look-ahead, loops, difficulty levels)
+  challenge/     Challenge database and challenge mode
+  tutorial/      Tutorial levels
+  ui/            Menus, programming interface and HUD
+  scenes/        Base game scene (inherited by tutorial and challenges)
+  test/          Automated tests
+assets/          Graphics, fonts, music and shaders
+addons/gut/      Testing framework
+```
 
----
-
-## 🚀 How to Run the Project
-
-1.  Open the project in **Godot Engine 4.x**.
-2.  Load the main scene `Main.tscn`.
-3.  Press the **Run** button (`▶️ Run`).
-4.  Use the console to see the results of the `test_block.gd` tests.
-
----
-
-## 📚 Project Goals
-
-* Integrate modular logic (blocks) into a classic strategy game.
-* Experiment with basic **Artificial Intelligence (AI)** by creating visual scripts for the pieces.
-* Develop a scalable and maintainable architecture for future turn-based strategy games.
-
----
-
-## 👨‍💻 Author
+### Author
 
 **Felipe Carballo**
-Software Developer and Systems Analysis student.
+Software developer and Systems Analysis student.
 
-* [GitHub](https://github.com/ArukouFX)
-* [LinkedIn](https://www.linkedin.com/in/felipecarballolovato/)
+- [GitHub](https://github.com/ArukouFX)
+- [LinkedIn](https://www.linkedin.com/in/felipecarballolovato/)
 
----
+### License
 
-## 🧾 License
-
-This project is distributed under the **MIT License**. You are free to use, modify, and distribute the code, provided you retain attribution to the original author.
-
-<div align="center">
-    <h1>Versión en Español</h1>
-</div>
-
-
-# ♟️ C-Chess: Ajedrez Programable
-
-**C-Chess** es un proyecto de estrategia por turnos desarrollado en **Godot Engine 4.x** que combina las mecánicas clásicas del ajedrez con un innovador **sistema de bloques programables**.
-
-El objetivo es explorar cómo la **programación visual y la lógica modular** pueden integrarse para dar a cada pieza un comportamiento autónomo y personalizable.
+Distributed under the **MIT License**. See the `LICENSE` file for details.
 
 ---
 
-## 🧠 Sistema de Bloques (BlockSystem)
+## Versión en Español
 
-Este es el motor lógico central del proyecto. Funciona como un intérprete que:
-* Define y gestiona bloques de acción (mover, capturar, condiciones, etc.).
-* Asigna límites de recursos virtuales (**"RAM"**) a cada pieza.
-* Permite crear **scripts visuales** (secuencias de bloques) que las piezas ejecutan automáticamente en su turno.
+**C-Chess** es un juego educativo de estrategia por turnos desarrollado con **Godot Engine 4.3** (Blazium 4.3.2). En lugar de mover las piezas directamente, los jugadores **programan** cada pieza con bloques visuales, de forma similar a Scratch. Cada pieza tiene una cantidad limitada de memoria (**RAM**), por lo que hay que planificar, ordenar y comprimir los programas.
 
-Esto permite un ajedrez programable donde las estrategias se definen a nivel de código modular.
+El proyecto se desarrolló como Trabajo de Conclusión de Curso (TCC). Su objetivo es ejercitar el **pensamiento computacional** dentro de un juego conocido: secuenciación, abstracción (loops), gestión de recursos y depuración.
 
----
+### Modos de juego
 
-## 🧩 Estructura Principal del Proyecto
+- **Partida contra el bot**, con tres niveles de dificultad (Fácil, Normal, Difícil).
+- **Multijugador local**: dos jugadores en la misma computadora.
+- **Tutorial**: 9 niveles guiados que presentan cada regla.
+- **Desafíos**: 5 problemas, desde la compresión de RAM hasta el jaque mate.
 
-### 🎮 Escena Principal (`Main.tscn`)
+### Cómo se juega
 
-Contiene los nodos fundamentales que orquestan el juego:
+1. Haz clic en una de tus piezas para abrir la interfaz de programación.
+2. Arrastra bloques de movimiento al área de trabajo. El tablero muestra una **vista previa** del recorrido: cada paso aparece numerado, las capturas se marcan en rojo y los movimientos inválidos con una cruz.
+3. Pulsa **Ejecutar**. La pieza ejecuta su programa y el turno pasa al rival.
+4. Captura al rey enemigo para ganar.
 
-* **`_GameManager`**: Lógica principal (gestión de turnos, condiciones de victoria, etc.).
-* **`_Table`**: Representación del tablero de ajedrez.
-* **`_Pieces`**: Contiene y gestiona todas las piezas en juego.
-* **`_Turn`**: Controla y muestra el turno actual.
-* **`_BackGround`**: Fondo visual del tablero.
-* **`_CanvasLayer`**: Capa para la interfaz de usuario (UI).
-* **`_Camera`**: Cámara principal de la escena.
-* **`_Music`**: Controlador de música de fondo.
-* **`_Node (test_block.gd)`**: Nodo auxiliar utilizado para pruebas del sistema de bloques.
+### Reglas
 
----
+**RAM por pieza.** Todas las piezas usan los mismos ocho bloques de movimiento. Solo se diferencian en la memoria:
 
-### 🧱 Escena Secundaria (`Board.tscn`)
+| Pieza | Peón | Rey | Caballo | Alfil | Torre | Reina |
+|---|---|---|---|---|---|---|
+| RAM | 8 | 12 | 16 | 20 | 24 | 32 |
 
-Define el área de juego y sus interacciones:
+**Costo incremental.** Un bloque cuesta su valor base (2 en línea recta, 3 en diagonal) más 1 por cada bloque que tenga antes en la cola. Tres bloques "Adelante" cuestan 2 + 3 + 4 = 9.
 
-* **`_Board`**: Nodo principal del tablero.
-    * `Sprite2D`: Representación gráfica.
-    * `Area2D`: Detecta interacciones y colisiones.
-    * `CollisionShape2D`: Define el área física de interacción.
+**Loops.** Un loop agrupa una secuencia en un solo bloque. Cuesta lo mismo que su contenido y ocupa un solo lugar en la cola, así que las secuencias largas salen más baratas. Los loops se pueden anidar.
 
----
+**Protocolo de escape.** Una protección de un solo uso: cuando la pieza va a ser capturada, se mueve un bloque. El escape falla si la casilla de destino está ocupada o fuera del tablero.
 
-## ⚙️ Scripts Clave
+**Ejecución.** Salir del tablero o chocar con un aliado detiene el programa, y una captura lo termina. El caballo es la única pieza que puede atravesar aliados, pero no puede terminar su movimiento sobre uno.
 
-### `test_block.gd`
+### Cómo ejecutar el proyecto
 
-Script de prueba enfocado en verificar la funcionalidad del **BlockSystem**:
+1. Instala **Godot 4.3** o **Blazium 4.3.2**.
+2. Clona el repositorio y abre `project.godot`.
+3. Pulsa **Ejecutar**. El juego empieza en el menú principal (`src/ui/menus/MainMenu.tscn`).
 
-* **Funcionalidades testeables:**
-    * Obtener información de bloques (`get_block_info`).
-    * Filtrado por categorías (`get_blocks_by_category`).
-    * Capacidad de memoria RAM de las piezas (`get_piece_ram_capacity`).
-    * Cálculo del uso de RAM en scripts (`calculate_ram_usage`).
-    * Validación de scripts (`is_script_valid`).
+### Tests
 
-* **Ejemplo de Script de Prueba:**
-    ```gdscript
-    var test_script = [
-        {"type": "move_forward"},
-        {"type": "if_enemy_front"}, 
-        {"type": "capture"}
-    ]
-    ```
+El proyecto incluye 188 tests automáticos escritos con [GUT](https://github.com/bitwes/Gut), ubicados en `src/test/unit/`. Cubren el sistema de bloques, el bot, los desafíos, los menús y partidas simuladas completas. Uno de ellos comprueba además que la vista previa del recorrido coincide siempre con la ejecución real.
 
-### `turn_display.gd`
+Se ejecutan desde el panel de GUT en el editor o desde la terminal:
 
-Controla la visualización y animación del turno actual:
+```bash
+godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://src/test/unit -gexit
+```
 
-* Muestra qué jugador tiene el turno (**blanco** o **negro**).
-* Aplica una animación visual cíclica para dar dinamismo al indicador de turno.
+### Estructura del proyecto
 
-* **Función de Actualización:**
-    ```gdscript
-    func update_turn(turn: String):
-        if turn == "white":
-            texture = load("res://Assets/turn-white.png")
-        else:
-            texture = load("res://Assets/turn-black.png")
-    ```
+```
+src/
+  core/          Gestor de partida, configuración global, guardado, música, resolución
+  entities/      Tablero, piezas y vista previa del recorrido
+  programming/   Sistema de bloques, bloques arrastrables, simulación de programas
+  IA/            Bot (mapa de amenazas, mirada adelante, loops, niveles de dificultad)
+  challenge/     Base de desafíos y modo desafío
+  tutorial/      Niveles del tutorial
+  ui/            Menús, interfaz de programación y HUD
+  scenes/        Escena base de la partida (la heredan el tutorial y los desafíos)
+  test/          Tests automáticos
+assets/          Gráficos, fuentes, música y shaders
+addons/gut/      Framework de tests
+```
 
----
-
-## 🚀 Cómo Ejecutar el Proyecto
-
-1.  Abre el proyecto en **Godot Engine 4.x**.
-2.  Carga la escena principal `Main.tscn`.
-3.  Presiona el botón de **Ejecutar** (`▶️ Run`).
-4.  Usa la consola para ver los resultados de las pruebas de `test_block.gd`.
-
----
-
-## 📚 Objetivos del Proyecto
-
-* Integrar lógica modular (bloques) en un juego clásico de estrategia.
-* Experimentar con **Inteligencia Artificial (IA) básica** mediante la creación de scripts visuales para las piezas.
-* Desarrollar una arquitectura escalable y mantenible para futuros juegos de estrategia por turnos.
-
----
-
-## 👨‍💻 Autor
+### Autor
 
 **Felipe Carballo**
 Desarrollador de software y estudiante de Análisis de Sistemas.
 
-* [GitHub](https://github.com/ArukouFX)
-* [LinkedIn](https://www.linkedin.com/in/felipecarballolovato/)
+- [GitHub](https://github.com/ArukouFX)
+- [LinkedIn](https://www.linkedin.com/in/felipecarballolovato/)
 
----
+### Licencia
 
-## 🧾 Licencia
-
-Este proyecto se distribuye bajo la **Licencia MIT**. Eres libre de usar, modificar y distribuir el código, siempre que mantengas la atribución al autor original.
+Se distribuye bajo la **Licencia MIT**. Consulta el archivo `LICENSE` para más detalles.
